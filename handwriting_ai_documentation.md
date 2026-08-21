@@ -597,6 +597,89 @@ sakein.
 
 ---
 
+### Phase 10 - Round 3 Shuru Hui, Live Update (Epoch 0 se Epoch 6 tak)
+
+Round 3 ki training shuru ho chuki hai, matlab yeh AI model ka **chautha
+(4th) training attempt** hai. Is baar teeno naye fixes (beta floor,
+kam noise, fixed seed) ek saath active hain, aur training warm-start
+hui hai Round 2 ke best checkpoint (epoch 37, val loss `-0.8912`) se.
+
+**Warm start bilkul clean raha.** Log mein saaf likha hai ki model ne
+apne saare 147 tensors bina kisi galti ke reuse kiye, aur koi bhi purani
+layer drop ya fresh reinitialize nahi hui. Matlab Phase 7 mein jo
+migration bug fix kiya gaya tha, wo yahan bhi sahi kaam kar raha hai.
+
+**Sabse pehla accha sign: val loss turant purane best se aage nikal
+gaya.** Purana best (Round 2 khatam hone par) `-0.8912` tha. Round 3
+ka pehla hi epoch khatam hote hote val loss `-0.9684` ban gaya, aur
+epoch 6 tak `-1.1428` tak pahunch gaya. Matlab sirf training recipe
+badalne se (noise kam kiya, beta ko ek limit se zyada dhundhla hone se
+roka) model turant behtar seekhne laga, poori purani 40-epoch training
+se bhi aage.
+
+**Epoch 0 ki generated image bahut kachra dikhi.** Jab is checkpoint se
+"Namaskar" likhwaya gaya, to output ek almost khaali page tha jisme sirf
+kuch bikhri hui, chhoti chhoti disconnected marks thi, koi letter jaisi
+shape nahi ban rahi thi. Iski wajah seedhi si hai: model ne 290 points
+mein 31 baar pen uthai, jabki asli handwriting mein itne points ke liye
+sirf 11-12 baar uthni chahiye thi. Itni zyada baar pen uthne se koi bhi
+stroke lamba nahi ho paaya, sab kuch chhote chhote tukdo mein toot gaya.
+
+Yeh dikhne mein bura lagta hai, lekin deep learning mein yeh ek jaana
+pehchana pattern hai. Jab training recipe mein ek saath do badi cheezein
+badal di jaati hain (yahan beta floor aur kam noise dono ek saath aaye),
+to model ke pehle kuch epochs "confused" jaise dikhte hain, kyunki uski
+purani strategy (jo Round 2 mein seekhi thi) achanak kaam karna band kar
+deti hai aur usay naye rules ke hisab se dobara adjust hona padta hai.
+
+**Epoch 5 tak sudhar saaf dikhne laga.** Isi "Namaskar" test par ab
+model ne 169 points mein sirf 13 baar pen uthai, jo asli human range
+(roughly 6-7 expected is length ke liye) ke kaafi kareeb hai, pehle ke
+31 se bahut behtar. Image mein bhi farak dikhta hai, ab chhote bikhre
+hue dots ki jagah lambi, continuous, judi hui lines dikhti hain jo kuch
+letter jaisi shapes bana rahi hain, jaise ek "t", ek round "o" jaisa
+loop, aur kuch straight vertical strokes. Spelling abhi bhi sahi nahi
+hai, "Namaskar" ki jagah kuch aisa nikal raha hai jo padhne mein
+"toiiisic" jaisa lagta hai, lekin pen ka basic control (kab uthana hai,
+kab continuous rehna hai) wapas theek hota dikh raha hai.
+
+**Ek cheez jo thodi mixed hai: attention_width khud kam nahi ho raha.**
+`monotonic_attention.py` mein `beta` naam ka parameter hota hai jo yeh
+control karta hai ki attention kitni sharp hai (Section 4.4 dekho). Log
+mein iska record dikh raha hai jise yahan `attention_width` bola gaya
+hai. Epoch 0 par yeh `0.849` tha aur epoch 5 par `0.876`, matlab yeh
+thoda **badha** hai, ghata nahi. Agar chhota number sharper attention
+ko dikhata hai, to yeh ek halka sa ulta trend hai. Sirf do data points se
+koi pakka nateeja nikalna jaldi hoga, ho sakta hai yeh normal training
+noise ho, lekin agle kuch epochs mein bhi yehi trend chale to isay
+dhyan se dekhna zaroori hoga.
+
+**Val loss bhi seedhi line mein nahi gir raha, thoda upar-neeche hota
+hua neeche ja raha hai.** Epoch 3 se epoch 4 tak loss behtar hua
+(`-1.1145` se `-1.1389`), lekin epoch 4 se epoch 5 tak thoda wapas
+badha (`-1.1389` se `-1.1301`). Overall direction neeche hi hai, jo
+achi baat hai, lekin yeh perfectly smooth curve nahi hai, aisa
+up-and-down hona training mein bilkul normal hota hai.
+
+**Ek chhota extra bug bhi log mein dikha.** Training script ek
+PyTorch warning de raha hai ki `lr_scheduler.step()` ko
+`optimizer.step()` se pehle call kiya ja raha hai, jabki sahi order
+ulta hona chahiye. Isse training crash nahi hoti, lekin ismein
+learning rate schedule ka pehla value skip ho jaata hai. Yeh training
+ko rokne wali baat nahi hai, bas ek chhoti si cheez hai jo future mein
+train_expert.py ko aur clean karne ke liye theek ki ja sakti hai.
+
+**Ab tak ka honest summary:** direction sahi hai, val loss genuinely
+naye best records bana raha hai aur pen-lifts asli human range ki
+taraf aa rahe hain, jo dono achi baatein hain. Lekin abhi 6 hi epochs
+hue hain 39 mein se, spelling abhi bhi galat hai, aur attention_width
+ka trend clearly nahi sudhar raha (thoda badh hi raha hai abhi tak).
+Isliye poora bharosa karne se pehle epoch 15-20 tak ke naye numbers
+dekhna zaroori hoga, taaki pata chale ki yeh sudhar aage bhi continue
+karta hai ya nahi.
+
+---
+
 ## Section 8 - Poore System Ka Ek-Line Summary (Beginner Ke Liye Recap)
 
 Agar tum khud yeh system banana chaho to yeh crux hai:
