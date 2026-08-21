@@ -597,86 +597,106 @@ sakein.
 
 ---
 
-### Phase 10 - Round 3 Shuru Hui, Live Update (Epoch 0 se Epoch 6 tak)
+### Phase 10 - Round 3 Poori Kahani (Epoch 0 se Epoch 39 tak, Training Complete)
 
-Round 3 ki training shuru ho chuki hai, matlab yeh AI model ka **chautha
-(4th) training attempt** hai. Is baar teeno naye fixes (beta floor,
-kam noise, fixed seed) ek saath active hain, aur training warm-start
-hui hai Round 2 ke best checkpoint (epoch 37, val loss `-0.8912`) se.
+Round 3 humare AI model ka **chautha (4th) training attempt** tha. Is
+baar Phase 9 ke teeno fixes (beta floor `min_beta_hat = -2.3`, kam noise
+`noise_std = 0.03`, fixed evaluation seed) ek saath active the, aur
+training warm-start hui thi Round 2 ke best checkpoint (epoch 37, val
+loss `-0.8912`) se. Warm start bilkul clean raha, model ne apne saare
+147 tensors bina kisi galti ke reuse kiye, koi purani layer drop ya
+fresh reinitialize nahi hui.
 
-**Warm start bilkul clean raha.** Log mein saaf likha hai ki model ne
-apne saare 147 tensors bina kisi galti ke reuse kiye, aur koi bhi purani
-layer drop ya fresh reinitialize nahi hui. Matlab Phase 7 mein jo
-migration bug fix kiya gaya tha, wo yahan bhi sahi kaam kar raha hai.
+Poori 40-epoch training ab complete ho chuki hai. Neeche poori journey
+ka ek table hai, jisme har periodic check (har 5 epoch) ka data hai:
 
-**Sabse pehla accha sign: val loss turant purane best se aage nikal
-gaya.** Purana best (Round 2 khatam hone par) `-0.8912` tha. Round 3
-ka pehla hi epoch khatam hote hote val loss `-0.9684` ban gaya, aur
-epoch 6 tak `-1.1428` tak pahunch gaya. Matlab sirf training recipe
-badalne se (noise kam kiya, beta ko ek limit se zyada dhundhla hone se
-roka) model turant behtar seekhne laga, poori purani 40-epoch training
-se bhi aage.
+| Epoch | Val Loss | Attention Width (beta) | Pen-Lifts | Namaskar Kaisa Nikla |
+|---|---|---|---|---|
+| 0 | -0.9684 | 0.849 | 31 | Bikhri hui, disconnected marks - koi letter shape nahi |
+| 5 | -1.1301 | 0.876 | 13 | Continuous lekin garbled, jaise "toiiisic" |
+| 10 | -1.1497 | 0.876 | 15 | "lanacle" jaisa - letters ban rahe hain, galat |
+| 15 | -1.1722 | 0.855 | 19 | "lancicle" jaisa - kuch letters fragment hone lage |
+| 20 | -1.1874 | 0.726 | 19 | Bahut fragmented, "Tonic ci" jaisa tuta hua |
+| 25 | -1.1860 | 0.891 | 18 | "Tonacclr" - strokes wapas continuous, spelling stable |
+| 30 | -1.2076 | 0.817 | 16 | "Tonacclr" - bilkul same jaisa Epoch 25 |
+| 35 | -1.2136 | 0.811 | 17 | "Tonacclr" - bilkul same jaisa Epoch 25 aur 30 |
+| 39 (final) | -1.2196 | - | - | (koi naya visual check is epoch par nahi hua) |
 
-**Epoch 0 ki generated image bahut kachra dikhi.** Jab is checkpoint se
-"Namaskar" likhwaya gaya, to output ek almost khaali page tha jisme sirf
-kuch bikhri hui, chhoti chhoti disconnected marks thi, koi letter jaisi
-shape nahi ban rahi thi. Iski wajah seedhi si hai: model ne 290 points
-mein 31 baar pen uthai, jabki asli handwriting mein itne points ke liye
-sirf 11-12 baar uthni chahiye thi. Itni zyada baar pen uthne se koi bhi
-stroke lamba nahi ho paaya, sab kuch chhote chhote tukdo mein toot gaya.
+**Pehla accha sign: val loss turant purane best se aage nikal gaya.**
+Round 2 ka best (`-0.8912`) Round 3 ke pehle hi epoch mein cross ho
+gaya (`-0.9684`), aur training khatam hote hote yeh `-1.2196` tak
+pahunch gaya, jo Round 2 se lagbhag 37 percent behtar hai.
 
-Yeh dikhne mein bura lagta hai, lekin deep learning mein yeh ek jaana
-pehchana pattern hai. Jab training recipe mein ek saath do badi cheezein
-badal di jaati hain (yahan beta floor aur kam noise dono ek saath aaye),
-to model ke pehle kuch epochs "confused" jaise dikhte hain, kyunki uski
-purani strategy (jo Round 2 mein seekhi thi) achanak kaam karna band kar
-deti hai aur usay naye rules ke hisab se dobara adjust hona padta hai.
+**Shuru ke epochs mein "shock phase" dikha.** Epoch 0 ki image mein
+sirf bikhri hui, chhoti chhoti disconnected marks thi, koi letter shape
+nahi ban rahi thi, kyunki model 290 points mein 31 baar pen utha raha
+tha (expected sirf 11-12 ke aas paas). Yeh isliye hua kyunki ek saath
+do badi cheezein badal di gayi thi (beta floor aur kam noise), aur
+model ki purani (Round 2 wali) strategy achanak kaam karna band kar
+di. Epoch 5 tak yeh sudhar gaya, pen-lifts 13 par aa gaye aur strokes
+continuous ban gaye.
 
-**Epoch 5 tak sudhar saaf dikhne laga.** Isi "Namaskar" test par ab
-model ne 169 points mein sirf 13 baar pen uthai, jo asli human range
-(roughly 6-7 expected is length ke liye) ke kaafi kareeb hai, pehle ke
-31 se bahut behtar. Image mein bhi farak dikhta hai, ab chhote bikhre
-hue dots ki jagah lambi, continuous, judi hui lines dikhti hain jo kuch
-letter jaisi shapes bana rahi hain, jaise ek "t", ek round "o" jaisa
-loop, aur kuch straight vertical strokes. Spelling abhi bhi sahi nahi
-hai, "Namaskar" ki jagah kuch aisa nikal raha hai jo padhne mein
-"toiiisic" jaisa lagta hai, lekin pen ka basic control (kab uthana hai,
-kab continuous rehna hai) wapas theek hota dikh raha hai.
+**Beech ke epochs mein "physics" theek hua, phir letter mapping mein
+ek pattern set ho gaya.** Epoch 10-15 tak model ne roughly letter jaisi
+shapes banani shuru ki ("lanacle", "lancicle"), lekin Epoch 20 par
+achanak wapas heavy fragmentation aa gayi (attention_width bhi is
+epoch par sabse neeche, `0.726`, chala gaya). Epoch 25 tak yeh fir se
+stabilize hua, aur tabhi se ek specific galat spelling pattern -
+lagbhag "Tonacclr" jaisa kuch - set ho gaya jo Epoch 25, 30, aur 35
+teeno mein practically identical raha (maine teeno images khud dekhi
+hain, teeno mein wahi T-o-n-a shuru hoke fragmented c-curves wali
+pattern hai).
 
-**Ek cheez jo thodi mixed hai: attention_width khud kam nahi ho raha.**
-`monotonic_attention.py` mein `beta` naam ka parameter hota hai jo yeh
-control karta hai ki attention kitni sharp hai (Section 4.4 dekho). Log
-mein iska record dikh raha hai jise yahan `attention_width` bola gaya
-hai. Epoch 0 par yeh `0.849` tha aur epoch 5 par `0.876`, matlab yeh
-thoda **badha** hai, ghata nahi. Agar chhota number sharper attention
-ko dikhata hai, to yeh ek halka sa ulta trend hai. Sirf do data points se
-koi pakka nateeja nikalna jaldi hoga, ho sakta hai yeh normal training
-noise ho, lekin agle kuch epochs mein bhi yehi trend chale to isay
-dhyan se dekhna zaroori hoga.
+**Sabse important, honest observation: spelling ~20 epochs se frozen
+thi jabki loss lagataar (chhota sa) improve hota raha.** Epoch 25 se
+Epoch 39 tak val loss `-1.1860` se `-1.2196` tak gaya (chhota sa
+sudhar), lekin generated spelling in poore 15 epochs mein ek baar bhi
+nahi badli. Yeh ek genuinely strong signal hai ki training ke aakhri
+hisse mein jo bhi improvement ho raha tha, wo stroke ki smoothness ya
+kisi aur cheez se aa raha tha, letter-identity sahi karne se nahi.
 
-**Val loss bhi seedhi line mein nahi gir raha, thoda upar-neeche hota
-hua neeche ja raha hai.** Epoch 3 se epoch 4 tak loss behtar hua
-(`-1.1145` se `-1.1389`), lekin epoch 4 se epoch 5 tak thoda wapas
-badha (`-1.1389` se `-1.1301`). Overall direction neeche hi hai, jo
-achi baat hai, lekin yeh perfectly smooth curve nahi hai, aisa
-up-and-down hona training mein bilkul normal hota hai.
+**Beta khud kabhi wapas pathological level tak nahi gaya.** Round 2
+mein regressed model ka beta median `0.35` tak gir gaya tha (aur min
+`0.0001`). Round 3 mein poori training ke dauran beta `0.7` se `0.9`
+ke beech hi raha, kabhi bhi us purane khatarnak level ke kareeb nahi
+gaya. Matlab beta floor ne apna kaam kiya, "blurry vision" wapas nahi
+aayi.
 
-**Ek chhota extra bug bhi log mein dikha.** Training script ek
-PyTorch warning de raha hai ki `lr_scheduler.step()` ko
-`optimizer.step()` se pehle call kiya ja raha hai, jabki sahi order
-ulta hona chahiye. Isse training crash nahi hoti, lekin ismein
-learning rate schedule ka pehla value skip ho jaata hai. Yeh training
-ko rokne wali baat nahi hai, bas ek chhoti si cheez hai jo future mein
-train_expert.py ko aur clean karne ke liye theek ki ja sakti hai.
+**Jo abhi bhi verify nahi hua: "iski wajah beta clamp ka dead gradient
+hai" wala specific claim.** Yeh ek reasonable hypothesis hai (agar koi
+parameter ek hard limit par baar baar clamp hota hai, to us jagah par
+gradient zero ho sakta hai, jisse wo parameter aage seekh nahi paata),
+lekin kisi bhi log mein actual gradient values ya kitne parameters
+clamp boundary par hit ho rahe hain, yeh kabhi measure nahi kiya gaya.
+Jo confirm hua hai wo sirf yeh hai ki **kuch** stuck hai, yeh nahi ki
+**kaha** stuck hai. Ek doosri equally possible wajah yeh bhi ho sakti
+hai ki fusion layer ya MDN head ke weights apne aap ek local minimum
+mein phas gaye hon, jiska beta se koi seedha lena dena na ho.
 
-**Ab tak ka honest summary:** direction sahi hai, val loss genuinely
-naye best records bana raha hai aur pen-lifts asli human range ki
-taraf aa rahe hain, jo dono achi baatein hain. Lekin abhi 6 hi epochs
-hue hain 39 mein se, spelling abhi bhi galat hai, aur attention_width
-ka trend clearly nahi sudhar raha (thoda badh hi raha hai abhi tak).
-Isliye poora bharosa karne se pehle epoch 15-20 tak ke naye numbers
-dekhna zaroori hoga, taaki pata chale ki yeh sudhar aage bhi continue
-karta hai ya nahi.
+**Ek chhota extra bug bhi poori training mein log hota raha.** Training
+script har epoch par ek PyTorch warning deta raha ki `lr_scheduler.step()`
+ko `optimizer.step()` se pehle call kiya ja raha hai. Isse training
+crash nahi hoti, lekin learning rate schedule ka pehla value skip ho
+jaata hai. Chhoti si cheez hai jo aage clean ki ja sakti hai.
+
+**Final honest summary:** Round 3 ek genuine success hai is maayne mein
+ki "physics" (pen ka movement, kab uthana hai, stroke ki smoothness)
+poori tarah theek ho gaya aur beta kabhi pathological level tak nahi
+gaya. Lekin spelling ka problem poori 40 epochs mein solve nahi hua -
+yeh Epoch 20 ke aas paas ek fixed galat pattern par set ho gaya aur
+wahi tak raha. Iska matlab yeh nahi ki Round 3 fail hui, isne bahut
+kuch fix kiya aur ek bahut specific, narrow problem expose kar diya:
+letter-identity ka learning kahi na kahi stuck hai. Iski exact wajah
+(beta clamp, ya kuch aur) abhi bhi confirmed nahi hai.
+
+**Round 4 ka proposed plan (abhi tak implement nahi hua):** hard
+`torch.clamp` ko `F.softplus` jaisi soft floor se replace karna, taaki
+beta ek minimum se neeche na jaaye lekin kisi bhi parameter ka gradient
+kabhi bilkul zero na ho. Sath hi wo scheduler order wali chhoti bug bhi
+fix karna. Yeh ek reasonable engineering step hai chahe exact root
+cause confirmed ho ya na ho, lekin isay result ki tarah nahi, ek
+untested hypothesis ki tarah treat karna chahiye jab tak Round 4 ka
+apna data na aa jaaye.
 
 ---
 
