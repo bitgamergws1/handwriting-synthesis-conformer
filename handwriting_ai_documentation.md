@@ -727,7 +727,7 @@ apna data na aa jaaye.
 > - Pen physics: done
 > - Pen-lift behaviour: done
 > - Attention stability (beta kabhi pathological level tak nahi gaya): done
-> - Character identity (sahi letter likhna): not done
+> - Character identity (sahi letter likhna)/ text-to-stroke alignment: not solved
 >
 > Main remaining hypothesis: text-to-stroke alignment / fusion layer
 > ki learning kahi stuck hai (exact jagah abhi unconfirmed).
