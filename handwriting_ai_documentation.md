@@ -740,7 +740,7 @@ chalake. Yeh kaam lamba tha, beech mein ek AI tool ka token limit khatam
 ho gaya, to uska poora reasoning transcript ek doosre AI tool ko diya
 gaya taaki analysis wahi se aage continue ho sake. Baad mein yeh dono
 diagnostic scripts ek baar phir chalaye gaye taaki result reproduce ho.
-Aakhir mein tumne asli `best_model.pth` checkpoint upload karke sabse
+Aakhir mein mene asli `best_model.pth` checkpoint upload karke sabse
 zaroori claims (Theory A, Theory B ke saare checks, aur Adam-state wala
 calculation) ek baar aur dobara run karwa ke cross-verify karwaya, koi
 transcript par bharosa kiye bina. Neeche jo likha hai wo in sabhi runs
