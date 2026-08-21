@@ -714,23 +714,243 @@ kuch fix kiya aur ek bahut specific, narrow problem expose kar diya:
 letter-identity ka learning kahi na kahi stuck hai. Iski exact wajah
 (beta clamp, ya kuch aur) abhi bhi confirmed nahi hai.
 
-**Round 4 ka proposed plan (abhi tak implement nahi hua):** hard
-`torch.clamp` ko `F.softplus` jaisi soft floor se replace karna, taaki
-beta ek minimum se neeche na jaaye lekin kisi bhi parameter ka gradient
-kabhi bilkul zero na ho. Sath hi wo scheduler order wali chhoti bug bhi
-fix karna. Yeh ek reasonable engineering step hai chahe exact root
-cause confirmed ho ya na ho, lekin isay result ki tarah nahi, ek
-untested hypothesis ki tarah treat karna chahiye jab tak Round 4 ka
-apna data na aa jaaye.
+**Round 4 ka pehla plan (softplus fix) baad mein badal diya gaya** - jaisa
+Phase 11 mein aage detail hai, ek doosri diagnosis session ne beta-clamp
+wali theory ko hi reject kar diya, isliye softplus wala fix ab implement
+nahi kiya gaya. Neeche poori diagnosis process hai.
 
 > **Round 3 Verdict**
 > - Pen physics: done
 > - Pen-lift behaviour: done
 > - Attention stability (beta kabhi pathological level tak nahi gaya): done
-> - Character identity (sahi letter likhna)/ text-to-stroke alignment: not solved
+> - Character identity (sahi letter likhna): not done
 >
-> Main remaining hypothesis: text-to-stroke alignment / fusion layer
-> ki learning kahi stuck hai (exact jagah abhi unconfirmed).
+> Main remaining hypothesis (Phase 10 ke time tak): text-to-stroke
+> alignment / fusion layer ki learning kahi stuck hai (exact jagah abhi
+> unconfirmed - Phase 11 mein isay actually test kiya gaya).
+
+---
+
+### Phase 11 - Round 3 Ke Baad Ki Diagnosis (Round 4 Se Pehle)
+
+Round 3 khatam hone ke baad, "spelling kyun stuck hai" ka jawab dhoondhne
+ke liye do theories ko **actually test** kiya gaya, sirf reasoning se
+nahi, balki asli checkpoint aur asli data par script chala kar. Yeh kaam
+lamba tha, beech mein ek AI session ka token limit khatam ho gaya, to
+uska poora reasoning transcript ek doosre AI session ko diya gaya taaki
+wo wahi se aage continue kare. Ek teesre, independent audit session ne
+bhi dono diagnostic scripts phir se khud chalaye. Aakhir mein maine
+(is documentation ko likhne wale Claude ne) bhi khud asli
+`best_model.pth` checkpoint upload karwa kar sabse zaroori claims
+(Theory A, Theory B ke saare checks, aur Adam-state wala calculation)
+apne aap se dobara run kiye, koi transcript par bharosa kiye bina.
+Neeche jo likha hai wo in sabhi runs ka combined, cross-verified
+result hai.
+
+**Theory A: kya beta clamp se koi "dead gradient zone" bana?**
+Isay test karne ke liye ek diagnostic script (`diagnose_theory_a_beta_deadzone.py`)
+banaya gaya jo asli checkpoint par ek forward pass chalata hai, `beta_hat`
+ke clamp se PEHLE wale raw value ka gradient nikalta hai (ek PyTorch hook
+ke through), aur usay alpha aur kappa ke gradient se compare karta hai
+usi layer, usi batch, usi backward pass se.
+
+```python
+# forward hook lagana taaki param_proj ka clamp-se-pehle wala output
+# capture ho sake, bina model ka forward pass badle
+def capture_hook(module, inputs, output):
+    output.retain_grad()
+    captured["raw"] = output
+    return None
+
+handle = attn.param_proj.register_forward_hook(capture_hook)
+```
+
+Result: sirf 23 percent positions clamp floor par hit ho rahe the (poori
+tarah dominant nahi), aur zyada important, **beta ka actual gradient
+(`6.78e-2`) alpha ke gradient (`3.81e-2`) se bada nikla** - jo starvation
+ke bilkul ulta hai. Agar beta genuinely "dead" hota, to uska gradient
+sabse chhota hona chahiye tha, sabse bada nahi. **Theory A reject ho
+gayi**, seedhe measurement se, hypothesis se nahi.
+
+**Theory B: kya problem kahi aur (local minimum) hai?**
+Isay teen alag checks se test kiya gaya:
+
+1. **Per-module gradient health** - text encoder, backbone, attention,
+   fusion, aur MDN head, sabka gradient norm alag alag measure kiya
+   gaya usi backward pass se.
+2. **MDN mixture confidence** - kya model apne 20 mixture options mein
+   se ek par bahut zyada confidently commit kar raha hai (jo "confidently
+   wrong" hone ka sanket ho sakta hai)? Result: mean top-1 probability
+   `0.626` (agar model uncertain hota to yeh `0.05` ke aas paas hota),
+   entropy sirf 34 percent of max. Matlab model bahut confident hai apne
+   ek choice par, jo galat hai.
+3. **Text-encoder embedding confusion** - kya "N" aur "T", ya "m" aur
+   "n" jaisi jo letters aapas mein confuse ho rahi hain, unke learned
+   embeddings normal se zyada kareeb hain? Result: koi statistically
+   significant difference nahi mila (z-score sirf 0.07 - bilkul random
+   jaisa). Matlab character embeddings khud problem nahi hain.
+
+**Sabse bada finding: MDN head ka gradient baaki sab modules se kaafi
+zyada tha.** Text encoder, backbone, attention, fusion - sabka gradient
+chhota (`0.15` se `0.65` ke beech), jabki MDN head ka gradient bahut
+zyada tha. Yeh ek genuinely dhyan dene layak imbalance hai, aur teen
+alag independent runs mein consistently reproduce hua hai.
+
+**Ek zaroori caveat is finding par:** MDN head ka exact gradient number
+har alag run mein alag aaya (`198.0`, `45.076`, `92.50`, aur maine khud
+chalaya to `44.44`). Yeh koi calculation error nahi hai - har run mein
+`n_sequences` (batch size) alag tha, isliye har baar genuinely alag real
+data ka batch process ho raha tha. **Qualitative finding (MDN head ka
+gradient baaki se order-of-magnitude zyada hai) paanch independent runs
+mein solid raha hai**, lekin exact "kitna zyada" wala specific multiplier
+batch-dependent hai, isliye koi ek fixed number quote nahi karna
+chahiye.
+
+**Global gradient clipping ka asar bhi check kiya gaya**, aur pata chala
+ki `clip_grad_norm(max_norm=1.0)` MDN head ke bade gradient ki wajah se
+sabhi parameters ko lagbhag `0.011x` tak scale kar deta hai (upstream
+layers ka gradient bahut chhota reh jaata hai). Yeh sahi observation
+hai, lekin isse yeh nateeja nikalna ki "clipping hi asli problem hai"
+jaldi tha.
+
+**Kyunki: is claim ko ab actually test bhi kiya ja chuka hai, aur yeh
+sahi nikla.** Pehle yeh sirf ek code comment mein assert kiya gaya tha
+ki "Adam apne aap gradient imbalance ko equalize kar deta hai" - is
+document ke pichle version mein maine isay explicitly "unverified"
+flag kiya tha. Ab ek independent audit ne checkpoint ke asli saved
+`optimizer_state_dict` se `exp_avg` aur `exp_avg_sq` (Adam ke internal
+state) **directly load karke** effective update calculate kiya:
+
+```python
+m_hat = exp_avg / (1 - beta1**step)
+v_hat = exp_avg_sq / (1 - beta2**step)
+effective_update = (m_hat / (v_hat.sqrt() + eps)).abs()
+```
+
+Result: text_encoder `2.02e-1`, backbone `2.23e-1`, attention `1.50e-1`,
+fusion `1.61e-1`, mdn_head `2.13e-1` - **sab `1.5x` ke andar barabar**,
+jabki raw gradient mein 100x se zyada ka farak tha. Maine khud is
+underlying math ko bhi verify kiya (clip factor `c` Adam ke `m/√v`
+ratio mein cancel ho jaata hai kyunki `v` gradient ka square accumulate
+karta hai) - yeh sahi hai aur Adam ke design ka hi core property hai.
+**Yeh ab ek genuinely verified finding hai, sirf assertion nahi.**
+Matlab global clipping "asli problem" nahi hai, Adam use khud hi
+neutralize kar deta hai.
+
+**LR schedule bhi independently check hui, maine khud arithmetic verify
+kiya.** Spelling Epoch 20-25 ke aas paas freeze hui thi. Us waqt LR
+factor Epoch 20 par `0.516` aur Epoch 25 par `0.320` tha - matlab
+freeze hone ke baad bhi 10+ epochs tak meaningful learning rate maujood
+thi, phir bhi model nahi hila. Yeh "LR simply khatam ho gayi" wali
+saral explanation ko reject karta hai, aur genuine local-minimum /
+mode-lock wali theory ko support karta hai.
+
+**Round 4 ka final plan (softplus wale pehle plan ki jagah, ab
+verified reasoning ke saath):**
+
+1. **SGDR-style warm restarts** - Loshchilov & Hutter (2016) wala idea,
+   jisme learning rate baar baar peak tak wapas jaati hai (`--restart_cycle_epochs`,
+   default har 8 epochs mein ek restart), taaki agar model kisi local
+   minimum mein "polish" kar raha ho, to use bahar nikalne ka baar baar
+   moka mile.
+
+```python
+def build_warm_restart_scheduler(optimizer, warmup_steps, cycle_steps, total_steps):
+    def lr_lambda(step):
+        if step < warmup_steps:
+            return step / max(1, warmup_steps)
+        pos_in_cycle = (step - warmup_steps) % max(1, cycle_steps)
+        progress = pos_in_cycle / max(1, cycle_steps)
+        return 0.5 * (1.0 + math.cos(math.pi * min(progress, 1.0)))
+    return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+```
+
+2. **MDN mixture entropy regularizer** (`loss.py` mein naya
+   `pi_entropy_weight`, default `0.0` yaani off) - Check 2 ke finding
+   (model bahut confidently ek galat mixture par committed hai) ko seedha
+   target karta hai. Loss mein thodi entropy wapas jodta hai taaki model
+   thoda zyada der tak "uncertain" rahe, alternative shapes explore karta
+   rahe, seedha ek shape par lock na ho jaaye.
+
+3. **Asli scheduler bug fix** - jo pehle "order galat hai" socha gaya
+   tha, wo galat nikla. Asli bug yeh tha ki AMP ka `scaler.step()` kabhi
+   kabhi silently `optimizer.step()` skip kar deta hai (jab gradient mein
+   overflow ho), lekin `scheduler.step()` phir bhi chal jaata tha, jisse
+   schedule aur actual optimizer steps ke beech mismatch ho jaata tha.
+
+```python
+scale_before = scaler.get_scale()
+scaler.step(optimizer)
+scaler.update()
+step_was_skipped = scaler.get_scale() < scale_before
+if scheduler is not None and not step_was_skipped:
+    scheduler.step()
+```
+
+**In teeno fixes ko real checkpoint par end-to-end bhi test kiya gaya
+hai** - warm start (147/147 tensors reuse), warm-restart scheduler
+(LR genuinely peak tak wapas jump karta hai cycle boundary par, khud
+verify kiya gaya), entropy loss ka backward pass (NaN nahi aata), aur
+naye `train_expert.py` ka ek chhota CPU correctness-test run (kuch
+steps tak, poori epoch nahi) - sab crash ke bina chala. Yeh sirf ek
+**smoke test** tha (code crash nahi karta), poori training nahi hui -
+isliye yeh confirm nahi karta ki fix genuinely spelling theek karega,
+sirf itna confirm karta hai ki code sahi se likha gaya hai aur chal
+sakta hai.
+
+**Abhi tak koi Round 4 training nahi hui hai** - yeh sab preparation aur
+diagnosis hai, actual epochs chalna baaki hai. Isliye is phase ka koi
+"Verdict" box nahi hai; jab Round 4 ki training complete hogi, tab uska
+apna verdict likha jaayega.
+
+
+
+1. **SGDR-style warm restarts** - Loshchilov & Hutter (2016) wala idea,
+   jisme learning rate baar baar peak tak wapas jaati hai (`--restart_cycle_epochs`,
+   default har 8 epochs mein ek restart), taaki agar model kisi local
+   minimum mein "polish" kar raha ho, to use bahar nikalne ka baar baar
+   moka mile. Logic yeh hai ki jab loss dheere dheere improve ho raha ho
+   lekin spelling kabhi na badle (jaisa Round 3 mein hua), to ho sakta
+   hai optimizer ek hi basin mein fasa ho, aur ek monotonically kam hoti
+   learning rate use bahar nikalne ka koi moka nahi de rahi ho.
+
+```python
+def build_warm_restart_scheduler(optimizer, warmup_steps, cycle_steps, total_steps):
+    def lr_lambda(step):
+        if step < warmup_steps:
+            return step / max(1, warmup_steps)
+        pos_in_cycle = (step - warmup_steps) % max(1, cycle_steps)
+        progress = pos_in_cycle / max(1, cycle_steps)
+        return 0.5 * (1.0 + math.cos(math.pi * min(progress, 1.0)))
+    return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+```
+
+2. **MDN mixture entropy regularizer** (`loss.py` mein naya
+   `pi_entropy_weight`, default `0.0` yaani off) - Check 2 ke finding
+   (model bahut confidently ek galat mixture par committed hai) ko seedha
+   target karta hai. Loss mein thodi entropy wapas jodta hai taaki model
+   thoda zyada der tak "uncertain" rahe, alternative shapes explore karta
+   rahe, seedha ek shape par lock na ho jaaye.
+
+3. **Asli scheduler bug fix** - jo pehle "order galat hai" socha gaya
+   tha, wo galat nikla. Asli bug yeh tha ki AMP ka `scaler.step()` kabhi
+   kabhi silently `optimizer.step()` skip kar deta hai (jab gradient mein
+   overflow ho), lekin `scheduler.step()` phir bhi chal jaata tha, jisse
+   schedule aur actual optimizer steps ke beech mismatch ho jaata tha.
+
+```python
+scale_before = scaler.get_scale()
+scaler.step(optimizer)
+scaler.update()
+step_was_skipped = scaler.get_scale() < scale_before
+if scheduler is not None and not step_was_skipped:
+    scheduler.step()
+```
+
+**Abhi tak koi Round 4 training nahi hui hai** - yeh sab preparation aur
+diagnosis hai, actual epochs chalna baaki hai. Isliye is phase ka koi
+"Verdict" box nahi hai; jab Round 4 ki training complete hogi, tab uska
+apna verdict likha jaayega.
 
 ---
 
