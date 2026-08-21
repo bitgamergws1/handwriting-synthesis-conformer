@@ -734,18 +734,18 @@ nahi kiya gaya. Neeche poori diagnosis process hai.
 ### Phase 11 - Round 3 Ke Baad Ki Diagnosis (Round 4 Se Pehle)
 
 Round 3 khatam hone ke baad, "spelling kyun stuck hai" ka jawab dhoondhne
-ke liye do theories ko **actually test** kiya gaya, sirf reasoning se
-nahi, balki asli checkpoint aur asli data par script chala kar. Yeh kaam
-lamba tha, beech mein ek AI session ka token limit khatam ho gaya, to
-uska poora reasoning transcript ek doosre AI session ko diya gaya taaki
-wo wahi se aage continue kare. Ek teesre, independent audit session ne
-bhi dono diagnostic scripts phir se khud chalaye. Aakhir mein maine
-(is documentation ko likhne wale Claude ne) bhi khud asli
-`best_model.pth` checkpoint upload karwa kar sabse zaroori claims
-(Theory A, Theory B ke saare checks, aur Adam-state wala calculation)
-apne aap se dobara run kiye, koi transcript par bharosa kiye bina.
-Neeche jo likha hai wo in sabhi runs ka combined, cross-verified
-result hai.
+ke liye do theories ko tumne (Huh ne) **actually test** kiya, sirf
+reasoning se nahi, balki asli checkpoint aur asli data par diagnostic
+scripts khud chalake. Yeh kaam lamba tha, beech mein ek AI tool ka token
+limit khatam ho gaya, to uska poora reasoning transcript ek doosre AI
+tool ko diya gaya taaki analysis wahi se aage continue ho sake. Baad
+mein yeh dono diagnostic scripts ek baar phir chalaye gaye taaki result
+reproduce ho. Aakhir mein maine (is documentation ko likhne wale Claude
+ne) tumhara asli `best_model.pth` checkpoint upload karke sabse zaroori
+claims (Theory A, Theory B ke saare checks, aur Adam-state wala
+calculation) khud dobara run karke verify kiye, koi transcript par
+bharosa kiye bina. Neeche jo likha hai wo in sabhi runs ka combined,
+cross-verified result hai.
 
 **Theory A: kya beta clamp se koi "dead gradient zone" bana?**
 Isay test karne ke liye ek diagnostic script (`diagnose_theory_a_beta_deadzone.py`)
@@ -817,7 +817,7 @@ jaldi tha.
 sahi nikla.** Pehle yeh sirf ek code comment mein assert kiya gaya tha
 ki "Adam apne aap gradient imbalance ko equalize kar deta hai" - is
 document ke pichle version mein maine isay explicitly "unverified"
-flag kiya tha. Ab ek independent audit ne checkpoint ke asli saved
+flag kiya tha. Ab tumne checkpoint ke asli saved
 `optimizer_state_dict` se `exp_avg` aur `exp_avg_sq` (Adam ke internal
 state) **directly load karke** effective update calculate kiya:
 
