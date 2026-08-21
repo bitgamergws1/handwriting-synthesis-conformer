@@ -1,4 +1,4 @@
-# Handwriting Synthesis AI — Poori Documentation
+# Handwriting Synthesis AI - Poori Documentation
 ### Zero se seekho: yeh AI kaise text ko human jaisi handwriting mein badalta hai
 
 Yeh document is tarah likha gaya hai ki agar tumhe coding aur AI ka bilkul
@@ -9,7 +9,7 @@ ka chhota sa hissa dikhaya gaya hai comments ke saath.
 
 ---
 
-## Section 0 — Yeh Project Hai Kya
+## Section 0 - Yeh Project Hai Kya
 
 Hum ek AI bana rahe hain jise agar koi text diya jaaye jaise "Namaskar" to
 wo us word ko ek insaan jaisi cursive handwriting mein khud se likh de.
@@ -25,7 +25,7 @@ ke saath record kiya gaya hai.
 
 ---
 
-## Section 1 — Bilkul Basic Concepts (agar AI ka A B C bhi nahi pata)
+## Section 1 - Bilkul Basic Concepts (agar AI ka A B C bhi nahi pata)
 
 **Neural Network kya hota hai**
 Ek neural network ek badi si calculator hai jisme bahut saare numbers
@@ -36,12 +36,12 @@ ka matlab hai in weights ko dheere dheere sahi karna taaki output sahi
 aane lage.
 
 **Training kaise hoti hai (chaar step ka cycle)**
-1. Forward Pass — model ko input do, wo apna current best guess deta hai
-2. Loss Calculate — dekho model ka guess sahi answer se kitna door tha,
+1. Forward Pass - model ko input do, wo apna current best guess deta hai
+2. Loss Calculate - dekho model ka guess sahi answer se kitna door tha,
    is difference ko ek number mein convert karte hain jise loss kehte hain
-3. Backward Pass (Backpropagation) — yeh calculate karta hai ki har weight
+3. Backward Pass (Backpropagation) - yeh calculate karta hai ki har weight
    ko kis direction mein aur kitna badalne se loss kam hoga
-4. Update — sabhi weights ko thoda thoda us direction mein move kar dete
+4. Update - sabhi weights ko thoda thoda us direction mein move kar dete
    hain, is process ko gradient descent kehte hain
 
 Yeh chaaron step lakhon baar repeat hote hain, tab jaake model kuch
@@ -66,7 +66,7 @@ minimize karne ki koshish training karti hai.
 
 ---
 
-## Section 2 — Handwriting Ko Numbers Mein Kaise Badalte Hain
+## Section 2 - Handwriting Ko Numbers Mein Kaise Badalte Hain
 
 Insaan ki handwriting ko AI ke samajhne layak banane ke liye har pen stroke
 ko teen numbers mein todte hain, har chhote se timestep ke liye:
@@ -90,7 +90,7 @@ mapping ko **vocabulary** kehte hain.
 
 ---
 
-## Section 3 — Data Preparation (`preprocess_iam_ondb.py`)
+## Section 3 - Data Preparation (`preprocess_iam_ondb.py`)
 
 Yeh script raw IAM-OnDB ki XML files padhta hai jisme har writer ke pen
 ke actual coordinates hote hain, aur unhe clean karke ek `.npz` file mein
@@ -135,7 +135,7 @@ sirf 69 files ko reject karna pada kyunki unme data corrupt tha.
 
 ---
 
-## Section 4 — Model Architecture (asli "dimaag" kaise bana)
+## Section 4 - Model Architecture (asli "dimaag" kaise bana)
 
 Model ke andar paanch major blocks hain. Har ek ko ek insaan ke kaam se
 compare kar ke samajhte hain.
@@ -167,7 +167,7 @@ CausalConformerBackbone   "room" ho
                 MDN Head (final decision -- agla pen movement kya hoga)
 ```
 
-### 4.1 StrokeEmbedding — Haath ki Feeling
+### 4.1 StrokeEmbedding - Haath ki Feeling
 
 ```python
 self.stroke_embedding = nn.Linear(stroke_dim, d_model)  # 3 -> 256
@@ -176,7 +176,7 @@ Sirf ek Linear layer hai jo teen simple numbers ko 256 numbers ki richer
 representation mein badal deti hai, taaki aage ka network unse zyada
 pattern nikaal sake.
 
-### 4.2 Causal Conformer Backbone — Haath Ka Momentum
+### 4.2 Causal Conformer Backbone - Haath Ka Momentum
 
 Conformer ek architecture hai jo pehle speech recognition ke liye banaya
 gaya tha, yeh self-attention (dooor ke points ko bhi dekh sakta hai) aur
@@ -184,21 +184,21 @@ convolution (paas ke points ka local pattern pakadta hai) dono ko milata
 hai. Isse model ko pen ke movement ka "flow" aur "momentum" samajhne mein
 madad milti hai, jaise ek letter ke curve ka natural flow.
 
-**"Causal" ka matlab kya hai** — model sirf ab tak ke pen movements dekh
+**"Causal" ka matlab kya hai** - model sirf ab tak ke pen movements dekh
 sakta hai, future ke points nahi. Yeh isliye zaroori hai kyunki asli
 generation ke time model ko future pata hi nahi hota, wo ek ek point
 banata jaata hai. Agar training mein model ko future dikha diya jaaye to
 wo generation ke time kaam nahi karega kyunki tab future exist hi nahi
 karta.
 
-### 4.3 Text Encoder — Text Ko Samajhna
+### 4.3 Text Encoder - Text Ko Samajhna
 
 Character ids (jaise "Namaskar" ke liye [N, a, m, a, s, k, a, r] ke
 numbers) ko ek embedding layer, phir convolution, phir bidirectional LSTM
 se guzarte hain taaki har character ka context uske aas paas ke characters
 ke saath mil kar ek meaningful vector bana sake.
 
-### 4.4 Monotonic Gaussian Attention — AI Ki Aankh (sabse clever hissa)
+### 4.4 Monotonic Gaussian Attention - AI Ki Aankh (sabse clever hissa)
 
 Yeh sabse interesting part hai. Isko Graves 2013 paper se liya gaya hai,
 jisme model text ko ek fixed window ke through padhta hai jo hamesha
@@ -221,27 +221,27 @@ kappa = torch.cumsum(kappa_increment, dim=1)
 ```
 
 `torch.cumsum` ek built-in function hai jo apne aap running total banata
-hai — matlab position 5 ki value = position 1 se 5 tak ke saare increments
+hai - matlab position 5 ki value = position 1 se 5 tak ke saare increments
 ka jod. Yeh bilkul wahi kaam karta hai jo original LSTM sequentially karta
 tha (ek ek karke jodna), bas yahan ek hi line mein poore sequence ke liye
 parallel mein ho jaata hai, koi Python loop nahi chalani padti. Isse
 training bahut fast ho jaati hai.
 
 `kappa_increment` ko `exp()` se guzarna zaroori hai taaki wo hamesha
-positive rahe — agar increment kabhi negative ho jaaye to attention
+positive rahe - agar increment kabhi negative ho jaaye to attention
 peeche chali jaayegi aur "monotonic" property toot jaayegi.
 
 Isi block mein ek aur parameter hai jise `beta` kehte hain, jo yeh
 control karta hai ki attention ka focus kitna sharp (ek letter par tight)
 ya kitna wide (kai letters ek saath dhundhla) hai. Yeh parameter aage
 Phase 9 mein ek bada bug banega, jaha model isay jaan bujh kar chhota
-kar deta hai — us poori kahani ke liye Section 7 ka Phase 9 dekho.
+kar deta hai - us poori kahani ke liye Section 7 ka Phase 9 dekho.
 
-### 4.5 Fusion Layer — Wo Jagah Jaha Sabse Bada Bug Tha
+### 4.5 Fusion Layer - Wo Jagah Jaha Sabse Bada Bug Tha
 
 Yahan haath (Conformer ka output) aur aankh (attention ka context) dono
 ko milaya jaata hai. Round 1 ki training mein yahi wo jagah thi jaha
-"Joint LayerNorm Bug" mila tha — ek hi normalization layer dono signals ko
+"Joint LayerNorm Bug" mila tha - ek hi normalization layer dono signals ko
 saath mein normalize kar rahi thi, jisse haath ka signal aankh ke signal
 se 6 guna zyada loud reh jaata tha.
 
@@ -264,10 +264,10 @@ fused = self.fusion(torch.cat([h_normed, context_normed], dim=-1))
 Har signal ko pehle apni khud ki normalization milti hai (apna mean zero,
 apna spread ek jaisa), tabhi unhe milaya jaata hai. Isse dono signals
 barabar importance ke saath network tak pahunchte hain, aur network khud
-seekh leta hai ki kis time par kisko zyada weight dena hai — kisi accident
+seekh leta hai ki kis time par kisko zyada weight dena hai - kisi accident
 ki wajah se nahi.
 
-### 4.6 MDN Head — Final Decision (Mixture Density Network)
+### 4.6 MDN Head - Final Decision (Mixture Density Network)
 
 Yahan ek zaroori concept hai: agla pen movement predict karte waqt AI ek
 hi fixed answer nahi deta. Kyunki handwriting mein hamesha thoda variation
@@ -277,11 +277,11 @@ Network (MDN) kehte hain.
 
 Har timestep par model 20 chhote "guesses" (mixtures) deta hai, har ek ke
 paas:
-- `pi` — is guess par kitna bharosa karna hai
-- `mu_x, mu_y` — is guess ke hisab se pen kaha jaayega
-- `sigma_x, sigma_y` — kitna uncertain hai yeh guess
-- `rho` — x aur y movement aapas mein kitne juday hue hain
-- `pen_logit` — pen uthana hai ya nahi, iski probability
+- `pi` - is guess par kitna bharosa karna hai
+- `mu_x, mu_y` - is guess ke hisab se pen kaha jaayega
+- `sigma_x, sigma_y` - kitna uncertain hai yeh guess
+- `rho` - x aur y movement aapas mein kitne juday hue hain
+- `pen_logit` - pen uthana hai ya nahi, iski probability
 
 ```python
 # sigma hamesha positive honi chahiye, isliye exp() use karte hain
@@ -291,20 +291,20 @@ sigma_x = torch.exp(sigma_x_hat.clamp(-7.0, 7.0))
 rho = torch.tanh(rho_hat).clamp(-1 + 1e-6, 1 - 1e-6)
 ```
 
-`clamp` yahan safety ke liye lagaya gaya hai — agar raw number bahut bada
+`clamp` yahan safety ke liye lagaya gaya hai - agar raw number bahut bada
 ho jaaye to `exp()` explode karke infinity de sakta hai, jo aage jaake
 poori training ko NaN (invalid number) bana sakta hai. Yeh chhoti si line
 poori training run ko crash hone se bachati hai.
 
 ---
 
-## Section 5 — Loss Function: Model Ki Galti Kaise Naapte Hain (`loss.py`)
+## Section 5 - Loss Function: Model Ki Galti Kaise Naapte Hain (`loss.py`)
 
 Ab hume yeh naapna hai ki model ke MDN guesses asli target se kitne door
 hain. Seedha seedha formula lagane mein ek badi dikkat hai jise samajhna
 zaroori hai.
 
-**Problem — Underflow:**
+**Problem - Underflow:**
 Gaussian probability density ka formula `exp(-badi_value)` involve karta
 hai. Agar model ki prediction bahut galat hai (training ke shuru mein
 aam baat hai), to yeh `badi_value` itni bada ho sakti hai ki `exp()` uska
@@ -314,7 +314,7 @@ hai). Agar sab 20 mixtures ka result `0.0` ho jaaye to unka total bhi
 `infinity` deta hai. Ek hi aisi galti poori batch ki training kharab kar
 sakti hai.
 
-**Fix — Log-Space mein kaam karna:**
+**Fix - Log-Space mein kaam karna:**
 
 ```python
 # GALAT (seedha linear space mein):
@@ -336,7 +336,7 @@ deta hai). Isse mixture ka sahi answer milta hai bina underflow ke risk ke.
 **Pen-lift ke liye Class-Weighted Loss:**
 Asli handwriting mein pen uthana rare event hai (measured rate sirf
 3.97 percent time). Agar simple loss use karein to model "hamesha pen
-neeche hi rakho" bol kar bhi kam loss paa sakta hai — yeh ek lazy shortcut
+neeche hi rakho" bol kar bhi kam loss paa sakta hai - yeh ek lazy shortcut
 hai jo model khud dhoond leta hai.
 
 ```python
@@ -354,9 +354,9 @@ predict karna seriously lena padta hai, sirf usko ignore nahi kar sakta.
 
 ---
 
-## Section 6 — Training Loop Kaise Chalta Hai
+## Section 6 - Training Loop Kaise Chalta Hai
 
-**Teacher Forcing** — training ke time model ko har step par pichla
+**Teacher Forcing** - training ke time model ko har step par pichla
 ASLI (ground truth) point diya jaata hai, uska khud ka guess nahi. Isse
 training fast aur stable hoti hai, kyunki agar model ek galti kare to wo
 agle step tak carry nahi hoti.
@@ -366,7 +366,7 @@ strokes_in = strokes[:-1]      # model ko yeh dikhaya jaata hai (input)
 strokes_target = strokes[1:]   # model ko yeh predict karna hai (answer)
 ```
 
-**AMP (Automatic Mixed Precision)** — GPU par speed badhane ke liye
+**AMP (Automatic Mixed Precision)** - GPU par speed badhane ke liye
 zyadatar calculation float16 (chhoti precision) mein hoti hai, jo fast
 hoti hai lekin kam accurate. Kuch jagah jaha numbers bahut chhote ya bahut
 bade ho sakte hain (jaise MDN ka log-space calculation, attention ka
@@ -380,7 +380,7 @@ with torch.autocast(device_type=device.type, enabled=False):
     ...
 ```
 
-**Gradient Clipping** — kabhi kabhi gradient (weight update ki direction
+**Gradient Clipping** - kabhi kabhi gradient (weight update ki direction
 aur magnitude) achanak bahut bada ho jaata hai, jisse training unstable ho
 jaati hai. Isliye har update se pehle gradient ki maximum size limit kar
 dete hain:
@@ -389,7 +389,7 @@ dete hain:
 torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 ```
 
-**Warm Start** — poori training dobara shuru karne ke bajaye, ek pehle se
+**Warm Start** - poori training dobara shuru karne ke bajaye, ek pehle se
 trained checkpoint se weights uthate hain aur wahin se aage badhte hain.
 Yeh module bahut carefully likha gaya hai kyunki agar galti se kisi trained
 layer ko fresh weights se overwrite kar diya jaaye to woh silently poori
@@ -410,35 +410,35 @@ jab tak wo bahut mehnga bug ban chuki hoti hai.
 
 ---
 
-## Section 7 — Poori Journey: Kaise Ek Ek Karke Bugs Pakde Aur Fix Kiye
+## Section 7 - Poori Journey: Kaise Ek Ek Karke Bugs Pakde Aur Fix Kiye
 
-### Phase 1 — Data Preparation
+### Phase 1 - Data Preparation
 IAM-OnDB ke raw XML files ko padha, saaf kiya, normalize kiya, aur ek
 training-ready `.npz` file mein save kiya. 147 writers ka 7.6 million
 data points wala dataset taiyar hua (Section 3 dekho).
 
-### Phase 2 — Base Training (Pehle 47 Epochs)
-Conformer model banaya aur 47 epochs tak train kiya. Result mixed tha —
+### Phase 2 - Base Training (Pehle 47 Epochs)
+Conformer model banaya aur 47 epochs tak train kiya. Result mixed tha,
 attention (text ko padhna) 100 percent perfect seekh liya, lekin actual
 handwriting output stretched aur kharab tha.
 
-### Phase 3 — Deep Diagnosis: Joint LayerNorm Bug
-Root cause pakda gaya (Section 4.5 dekho) — haath ka signal aankh ke
+### Phase 3 - Deep Diagnosis: Joint LayerNorm Bug
+Root cause pakda gaya (Section 4.5 dekho) - haath ka signal aankh ke
 signal se 6 guna zyada loud tha isliye model text ignore karke bas
 andhe ki tarah cursive loops banata tha.
 
-### Phase 4 — Brain Surgery: Weight Remapping
+### Phase 4 - Brain Surgery: Weight Remapping
 `h_norm` aur `context_norm` ko alag alag split karke fix kiya. Scratch se
 training ke bajaye 143 purane trained tensors ko naye model mein safely
 transfer kiya (warm start), jisse mahino ki compute power bachi.
 
-### Phase 5 — Expert Fine-Tuning
+### Phase 5 - Expert Fine-Tuning
 `train_expert.py` (round 1) 39 epochs chala aur validation loss ko
 record-breaking -1.5886 tak le gaya.
 
-### Phase 6 — Reality Check: Exposure Bias Trap
+### Phase 6 - Reality Check: Exposure Bias Trap
 Validation loss record tha, lekin real generation test mein "Namaskar"
-977 steps mein sirf 1 baar pen uthata tha — poora kachra output. Deep
+977 steps mein sirf 1 baar pen uthata tha - poora kachra output. Deep
 diagnosis se pata chala model **exposure bias** ka shikaar tha:
 training mein hamesha perfect (teacher-forced) history milti thi, lekin
 generation ke time model ko apni khud ki chhoti galtiyon par aage chalna
@@ -451,9 +451,9 @@ Iska fix teen parts mein tha (poora code detail Section 5 aur 6 mein):
 input noise injection, class-weighted pen loss, aur periodic visual
 checks.
 
-### Phase 7 — Warm-Start Fix aur Epoch 0 Ki Jeet
+### Phase 7 - Warm-Start Fix aur Epoch 0 Ki Jeet
 Naya `train_expert.py` (round 2, teeno fixes ke saath) launch kiya gaya.
-Warm start karte waqt ek chhupa hua bug mila — purana migration table yeh
+Warm start karte waqt ek chhupa hua bug mila - purana migration table yeh
 maan kar chal raha tha ki source checkpoint bahut purana architecture wala
 hai, jabki wo pehle se hi fixed (post h_norm/context_norm) architecture
 istemal kar raha tha. Isliye ek already-trained layer chupke se delete
@@ -466,14 +466,14 @@ migration = {} if is_post_fix_source else FUSION_KEY_MIGRATION
 ```
 
 Fix hone ke baad model ne apne 147 ke 147 tensors bina kisi loss ke
-reuse kiye. Result shandar tha — sirf Epoch 0 ke baad hi "map border" bug
+reuse kiye. Result shandar tha - sirf Epoch 0 ke baad hi "map border" bug
 lagbhag khatam ho gaya. Pehle 977 steps mein 1 pen-lift ho rahi thi, ab
 141 steps mein 11 baar sahi tarike se pen uthi. Achanak heavy penalty
 (24x) aur naya noise ek saath aane ki wajah se pehli generated image
 thodi rough thi, lekin system ki basic "physics" (pen kab uthani hai)
 poori tarah theek ho gayi thi.
 
-### Phase 8 — Muscle Memory aur Convergence
+### Phase 8 - Muscle Memory aur Convergence
 Model ko 40 epochs tak lagataar train hone diya gaya taaki wo naye rules
 (pen kab uthana hai, input noise se kaise nipatna hai) ki poori aadat daal
 le. Har 5 epoch mein ek periodic visual check chala ("Namaskar" khud se
@@ -485,7 +485,7 @@ chalega, sirf validation loss accha hona kaafi nahi tha.
 
 ---
 
-### Phase 9 — "Blurry Vision" Bug Aur Dual AI Audit
+### Phase 9 - "Blurry Vision" Bug Aur Dual AI Audit
 Round 2 ki poori 40-epoch training safaltapoorvak khatam hui aur
 validation loss record-low -0.88 par set ho gaya. Pen-lift wala bug bhi
 poori tarah solve ho chuka tha, ab model 16 se 20 tak sahi pen-lifts
@@ -503,10 +503,10 @@ Is confusion ko samajhne ke liye ek gehra code review kiya gaya, jise
 "Dual AI Audit" naam diya gaya, matlab do alag AI systems se independently
 poora training code aur checkpoint audit karwaya gaya. Isme ek bahut hi
 interesting cheez samne aayi, jise ek "Deep Learning Exploit" kaha ja
-sakta hai — matlab model ne khud training process ki ek kamzori dhoondh
+sakta hai - matlab model ne khud training process ki ek kamzori dhoondh
 kar uska galat fayda utha liya tha.
 
-**Asli Wajah — Model Ki Aankhein Dhundhli Ho Gayi Thin**
+**Asli Wajah - Model Ki Aankhein Dhundhli Ho Gayi Thin**
 Phase 7 mein exposure bias hatane ke liye humne training input mein thoda
 noise (`noise_std = 0.1`) daala tha, taaki model chhoti galtiyon se
 recover karna seekhe (Section 6 dekho). Lekin model ne is noise se bachne
@@ -536,7 +536,7 @@ metric ko "game" kar leta hai apni real understanding sudhare bina.
 
 **The Fixes (Round 3 Ki Taiyari)**
 
-Fix number ek — Beta Guardrail (AI ko Chashma Pehnana). Attention module
+Fix number ek - Beta Guardrail (AI ko Chashma Pehnana). Attention module
 mein ek hard lower limit laga di gayi taaki beta kabhi bhi ek certain
 seema se zyada dhundhla na ho sake:
 
@@ -552,7 +552,7 @@ Ab model kitna bhi lazy hone ki koshish kare, uski attention ek limit se
 zyada wide nahi ho sakti, matlab usay har letter par thoda proper focus
 karna hi padega.
 
-Fix number do — Ek Chhupa Hua Config Bug. Audit ke dauran pata chala ki
+Fix number do - Ek Chhupa Hua Config Bug. Audit ke dauran pata chala ki
 naya `min_beta_hat` parameter checkpoint ki `model_config` file mein save
 hi nahi ho raha tha. Agar isay fix nahi karte, toh yeh bug abhi kuch nazar
 nahi aata kyunki training chal rahi hoti hai training script ke apne
@@ -569,18 +569,18 @@ if "min_beta_hat" not in model_config:
 model = HandwritingSynthesisModel(**model_config).to(device)
 ```
 
-Yeh chhoti si cheez seekhne layak hai — jab bhi model mein koi naya
+Yeh chhoti si cheez seekhne layak hai - jab bhi model mein koi naya
 tunable parameter add karo, use hamesha checkpoint ke config mein bhi
 explicitly save karo, warna future mein koi bhi is checkpoint ko dobara
 load karega toh usay pata hi nahi chalega ki wo parameter exist karta
 hai.
 
-Fix number teen — Noise Kam Karna Aur Seed Fix Karna. Model ko itna
+Fix number teen - Noise Kam Karna Aur Seed Fix Karna. Model ko itna
 zyada stress na dena padhe is wajah se `noise_std` ko 0.1 se ghata kar
 0.03 kar diya gaya, taaki model ko noise se recover karna toh aaye
 lekin utni zyada majboori mein wo apni attention hi dhundhli na kar de.
 
-Sath hi ek chhoti par zaroori cheez fix ki gayi — periodic visual check
+Sath hi ek chhoti par zaroori cheez fix ki gayi - periodic visual check
 ke time har baar `seed = epoch` use ho raha tha, matlab har epoch par
 random seed badal jaata tha. Isse dikkat yeh thi ki agar generation
 achha ya bura dikhe, hume pata hi nahi chalta ki yeh model ki asli
@@ -597,7 +597,7 @@ sakein.
 
 ---
 
-## Section 8 — Poore System Ka Ek-Line Summary (Beginner Ke Liye Recap)
+## Section 8 - Poore System Ka Ek-Line Summary (Beginner Ke Liye Recap)
 
 Agar tum khud yeh system banana chaho to yeh crux hai:
 
@@ -612,6 +612,6 @@ Agar tum khud yeh system banana chaho to yeh crux hai:
    karein
 6. Rare events (jaise pen-lift) ko extra weight do warna model unhe
    ignore kar dega
-7. Training mein sirf teacher forcing par bharosa mat karo — periodic
+7. Training mein sirf teacher forcing par bharosa mat karo - periodic
    real generation checks bhi chalao, warna training ke numbers accha
    dikhte rahenge jabki asli output kharab ho sakta hai
