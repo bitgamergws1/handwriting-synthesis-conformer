@@ -412,6 +412,11 @@ jab tak wo bahut mehnga bug ban chuki hoti hai.
 
 ## Section 7 - Poori Journey: Kaise Ek Ek Karke Bugs Pakde Aur Fix Kiye
 
+*Har training round ke end mein ek chhota "Round Verdict" box hai jo
+us round ka result ek nazar mein deta hai - kya done hua, kya nahi,
+aur agla remaining hypothesis kya hai. Poora detail padhne ka time na
+ho to sirf yeh boxes scan kar lena kaafi hai.*
+
 ### Phase 1 - Data Preparation
 IAM-OnDB ke raw XML files ko padha, saaf kiya, normalize kiya, aur ek
 training-ready `.npz` file mein save kiya. 147 writers ka 7.6 million
@@ -450,6 +455,15 @@ par calculate hota hai, self-generated data par nahi.
 Iska fix teen parts mein tha (poora code detail Section 5 aur 6 mein):
 input noise injection, class-weighted pen loss, aur periodic visual
 checks.
+
+> **Round 1 Verdict**
+> - Validation loss: excellent (record `-1.5886`)
+> - Pen physics: not done (real generation mein 977 steps mein sirf 1 pen-lift)
+> - Character identity: not testable (output itna garbage tha ki spelling judge karna possible nahi tha)
+>
+> Main remaining hypothesis: exposure bias - teacher forcing par zyada
+> bharosa, generation ke apne errors se recovery training mein kabhi
+> nahi seekhi gayi thi.
 
 ### Phase 7 - Warm-Start Fix aur Epoch 0 Ki Jeet
 Naya `train_expert.py` (round 2, teeno fixes ke saath) launch kiya gaya.
@@ -595,6 +609,17 @@ di gayi hai, jisme `attention_width` (beta kitna sharp hai) aur `n_lifts`
 hai, taaki is baar cursive flow aur spelling dono ek saath perfect aa
 sakein.
 
+> **Round 2 Verdict**
+> - Validation loss: excellent (record `-0.88`)
+> - Pen physics: done (16-20 sahi pen-lifts, exposure bias fix ho gaya)
+> - Attention stability: not done (beta median `2.56` se gir kar `0.35`
+>   tak aa gaya, kabhi kabhi `0.0001`)
+> - Character identity: not done ("Namaskar" ki jagah "Tanack"/"Tanoacco")
+>
+> Main remaining hypothesis: model ne noise se bachne ke liye attention
+> ko jaan-bujh kar dhundhla (wide) kar diya, jisse letters aapas mein
+> mix ho gaye.
+
 ---
 
 ### Phase 10 - Round 3 Poori Kahani (Epoch 0 se Epoch 39 tak, Training Complete)
@@ -697,6 +722,15 @@ fix karna. Yeh ek reasonable engineering step hai chahe exact root
 cause confirmed ho ya na ho, lekin isay result ki tarah nahi, ek
 untested hypothesis ki tarah treat karna chahiye jab tak Round 4 ka
 apna data na aa jaaye.
+
+> **Round 3 Verdict**
+> - Pen physics: done
+> - Pen-lift behaviour: done
+> - Attention stability (beta kabhi pathological level tak nahi gaya): done
+> - Character identity (sahi letter likhna): not done
+>
+> Main remaining hypothesis: text-to-stroke alignment / fusion layer
+> ki learning kahi stuck hai (exact jagah abhi unconfirmed).
 
 ---
 
