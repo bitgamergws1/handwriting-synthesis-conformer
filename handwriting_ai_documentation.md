@@ -734,18 +734,17 @@ nahi kiya gaya. Neeche poori diagnosis process hai.
 ### Phase 11 - Round 3 Ke Baad Ki Diagnosis (Round 4 Se Pehle)
 
 Round 3 khatam hone ke baad, "spelling kyun stuck hai" ka jawab dhoondhne
-ke liye do theories ko tumne (Huh ne) **actually test** kiya, sirf
-reasoning se nahi, balki asli checkpoint aur asli data par diagnostic
-scripts khud chalake. Yeh kaam lamba tha, beech mein ek AI tool ka token
-limit khatam ho gaya, to uska poora reasoning transcript ek doosre AI
-tool ko diya gaya taaki analysis wahi se aage continue ho sake. Baad
-mein yeh dono diagnostic scripts ek baar phir chalaye gaye taaki result
-reproduce ho. Aakhir mein maine (is documentation ko likhne wale Claude
-ne) tumhara asli `best_model.pth` checkpoint upload karke sabse zaroori
-claims (Theory A, Theory B ke saare checks, aur Adam-state wala
-calculation) khud dobara run karke verify kiye, koi transcript par
-bharosa kiye bina. Neeche jo likha hai wo in sabhi runs ka combined,
-cross-verified result hai.
+ke liye tumne do theories ko **actually test** kiya, sirf reasoning se
+nahi, balki asli checkpoint aur asli data par diagnostic scripts khud
+chalake. Yeh kaam lamba tha, beech mein ek AI tool ka token limit khatam
+ho gaya, to uska poora reasoning transcript ek doosre AI tool ko diya
+gaya taaki analysis wahi se aage continue ho sake. Baad mein yeh dono
+diagnostic scripts ek baar phir chalaye gaye taaki result reproduce ho.
+Aakhir mein tumne asli `best_model.pth` checkpoint upload karke sabse
+zaroori claims (Theory A, Theory B ke saare checks, aur Adam-state wala
+calculation) ek baar aur dobara run karwa ke cross-verify karwaya, koi
+transcript par bharosa kiye bina. Neeche jo likha hai wo in sabhi runs
+ka combined, cross-verified result hai.
 
 **Theory A: kya beta clamp se koi "dead gradient zone" bana?**
 Isay test karne ke liye ek diagnostic script (`diagnose_theory_a_beta_deadzone.py`)
@@ -797,14 +796,13 @@ zyada tha. Yeh ek genuinely dhyan dene layak imbalance hai, aur teen
 alag independent runs mein consistently reproduce hua hai.
 
 **Ek zaroori caveat is finding par:** MDN head ka exact gradient number
-har alag run mein alag aaya (`198.0`, `45.076`, `92.50`, aur maine khud
-chalaya to `44.44`). Yeh koi calculation error nahi hai - har run mein
-`n_sequences` (batch size) alag tha, isliye har baar genuinely alag real
-data ka batch process ho raha tha. **Qualitative finding (MDN head ka
-gradient baaki se order-of-magnitude zyada hai) paanch independent runs
-mein solid raha hai**, lekin exact "kitna zyada" wala specific multiplier
-batch-dependent hai, isliye koi ek fixed number quote nahi karna
-chahiye.
+har alag run mein alag aaya (`198.0`, `45.076`, `92.50`, `44.44`). Yeh
+koi calculation error nahi hai - har run mein `n_sequences` (batch size)
+alag tha, isliye har baar genuinely alag real data ka batch process ho
+raha tha. **Qualitative finding (MDN head ka gradient baaki se
+order-of-magnitude zyada hai) paanch independent runs mein solid raha
+hai**, lekin exact "kitna zyada" wala specific multiplier batch-dependent
+hai, isliye koi ek fixed number quote nahi karna chahiye.
 
 **Global gradient clipping ka asar bhi check kiya gaya**, aur pata chala
 ki `clip_grad_norm(max_norm=1.0)` MDN head ke bade gradient ki wajah se
@@ -816,8 +814,8 @@ jaldi tha.
 **Kyunki: is claim ko ab actually test bhi kiya ja chuka hai, aur yeh
 sahi nikla.** Pehle yeh sirf ek code comment mein assert kiya gaya tha
 ki "Adam apne aap gradient imbalance ko equalize kar deta hai" - is
-document ke pichle version mein maine isay explicitly "unverified"
-flag kiya tha. Ab tumne checkpoint ke asli saved
+document ke pichle version mein isay explicitly "unverified" flag
+kiya gaya tha. Ab tumne checkpoint ke asli saved
 `optimizer_state_dict` se `exp_avg` aur `exp_avg_sq` (Adam ke internal
 state) **directly load karke** effective update calculate kiya:
 
@@ -829,16 +827,16 @@ effective_update = (m_hat / (v_hat.sqrt() + eps)).abs()
 
 Result: text_encoder `2.02e-1`, backbone `2.23e-1`, attention `1.50e-1`,
 fusion `1.61e-1`, mdn_head `2.13e-1` - **sab `1.5x` ke andar barabar**,
-jabki raw gradient mein 100x se zyada ka farak tha. Maine khud is
-underlying math ko bhi verify kiya (clip factor `c` Adam ke `m/√v`
-ratio mein cancel ho jaata hai kyunki `v` gradient ka square accumulate
-karta hai) - yeh sahi hai aur Adam ke design ka hi core property hai.
-**Yeh ab ek genuinely verified finding hai, sirf assertion nahi.**
-Matlab global clipping "asli problem" nahi hai, Adam use khud hi
-neutralize kar deta hai.
+jabki raw gradient mein 100x se zyada ka farak tha. Yeh underlying math
+bhi verify hui (clip factor `c` Adam ke `m/√v` ratio mein cancel ho
+jaata hai kyunki `v` gradient ka square accumulate karta hai) - yeh
+sahi hai aur Adam ke design ka hi core property hai. **Yeh ab ek
+genuinely verified finding hai, sirf assertion nahi.** Matlab global
+clipping "asli problem" nahi hai, Adam use khud hi neutralize kar deta
+hai.
 
-**LR schedule bhi independently check hui, maine khud arithmetic verify
-kiya.** Spelling Epoch 20-25 ke aas paas freeze hui thi. Us waqt LR
+**LR schedule bhi independently check hui, arithmetic bhi verify ho
+chuka hai.** Spelling Epoch 20-25 ke aas paas freeze hui thi. Us waqt LR
 factor Epoch 20 par `0.516` aur Epoch 25 par `0.320` tha - matlab
 freeze hone ke baad bhi 10+ epochs tak meaningful learning rate maujood
 thi, phir bhi model nahi hila. Yeh "LR simply khatam ho gayi" wali
