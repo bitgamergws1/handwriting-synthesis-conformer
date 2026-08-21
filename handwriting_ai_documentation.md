@@ -903,55 +903,6 @@ diagnosis hai, actual epochs chalna baaki hai. Isliye is phase ka koi
 "Verdict" box nahi hai; jab Round 4 ki training complete hogi, tab uska
 apna verdict likha jaayega.
 
-
-
-1. **SGDR-style warm restarts** - Loshchilov & Hutter (2016) wala idea,
-   jisme learning rate baar baar peak tak wapas jaati hai (`--restart_cycle_epochs`,
-   default har 8 epochs mein ek restart), taaki agar model kisi local
-   minimum mein "polish" kar raha ho, to use bahar nikalne ka baar baar
-   moka mile. Logic yeh hai ki jab loss dheere dheere improve ho raha ho
-   lekin spelling kabhi na badle (jaisa Round 3 mein hua), to ho sakta
-   hai optimizer ek hi basin mein fasa ho, aur ek monotonically kam hoti
-   learning rate use bahar nikalne ka koi moka nahi de rahi ho.
-
-```python
-def build_warm_restart_scheduler(optimizer, warmup_steps, cycle_steps, total_steps):
-    def lr_lambda(step):
-        if step < warmup_steps:
-            return step / max(1, warmup_steps)
-        pos_in_cycle = (step - warmup_steps) % max(1, cycle_steps)
-        progress = pos_in_cycle / max(1, cycle_steps)
-        return 0.5 * (1.0 + math.cos(math.pi * min(progress, 1.0)))
-    return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
-```
-
-2. **MDN mixture entropy regularizer** (`loss.py` mein naya
-   `pi_entropy_weight`, default `0.0` yaani off) - Check 2 ke finding
-   (model bahut confidently ek galat mixture par committed hai) ko seedha
-   target karta hai. Loss mein thodi entropy wapas jodta hai taaki model
-   thoda zyada der tak "uncertain" rahe, alternative shapes explore karta
-   rahe, seedha ek shape par lock na ho jaaye.
-
-3. **Asli scheduler bug fix** - jo pehle "order galat hai" socha gaya
-   tha, wo galat nikla. Asli bug yeh tha ki AMP ka `scaler.step()` kabhi
-   kabhi silently `optimizer.step()` skip kar deta hai (jab gradient mein
-   overflow ho), lekin `scheduler.step()` phir bhi chal jaata tha, jisse
-   schedule aur actual optimizer steps ke beech mismatch ho jaata tha.
-
-```python
-scale_before = scaler.get_scale()
-scaler.step(optimizer)
-scaler.update()
-step_was_skipped = scaler.get_scale() < scale_before
-if scheduler is not None and not step_was_skipped:
-    scheduler.step()
-```
-
-**Abhi tak koi Round 4 training nahi hui hai** - yeh sab preparation aur
-diagnosis hai, actual epochs chalna baaki hai. Isliye is phase ka koi
-"Verdict" box nahi hai; jab Round 4 ki training complete hogi, tab uska
-apna verdict likha jaayega.
-
 ---
 
 ## Section 8 - Poore System Ka Ek-Line Summary (Beginner Ke Liye Recap)
