@@ -1374,6 +1374,100 @@ problem.
 
 ---
 
+### Phase 15 - Deep-Dive on the Round 5 Checkpoint and Round 6 Preparation
+
+The remaining hypothesis left in Round 5's Verdict (Phase 14) - that a
+max weight of `10.0x` was enough to destabilize training - was isolated
+and tested directly on the real Round 5 checkpoint, and Round 6's code
+was prepared based on that.
+
+**Setup:** The Round 5 checkpoint was loaded, epoch 39, val_loss
+`-7.1868` confirmed - the same checkpoint on which all of Phase 14's
+testing was done.
+
+**Independent Confirmation: "Namaskar" Was Generated and Checked Directly**
+
+"Namaskar" was independently generated from the Round 5 checkpoint: the
+first letter genuinely came out **T-shaped**, and the whole word
+fragmented entirely into disconnected dashes (**36 pen-lifts**, far too
+many for an 8-letter word). This visually matched Phase 14's claim in
+the documentation.
+
+**Beta Was Directly Measured (Via a Hook, on Real Data)**
+
+| Stat | Value |
+|---|---|
+| min | 0.100 |
+| p5 | 0.278 |
+| median | 5.69 |
+| p95 | 36.00 |
+| max | 299.14 |
+| fraction at floor | 0.33% |
+| p95/p5 ratio | 129.68x |
+
+Beta did not collapse - the median (5.69) is even sharper than Round
+4's healthy median (2.56). But the spread has become very
+heterogeneous (from 0.10 to 299). This directly matches Phase 13's
+rarity-weighting: an uneven 1x to 10x weight across different
+timesteps creates very different gradient pressure within the same
+sequence, causing beta to become inconsistent from timestep to
+timestep. This is the concrete mechanism behind the "attention_width
+volatility" already seen in Phase 14.
+
+**Three Fixes in Round 6 (all tested)**
+
+1. **`char_rarity_max_weight`: 10.0 → 4.0** - N still gets a meaningful
+   weight (4.0x), but the heterogeneity ratio drops from 8.15x to
+   3.26x. Verified via a table comparison.
+2. **SGDR restart-decay** (new `--restart_decay`, default `0.7`) - each
+   restart's peak LR becomes progressively gentler (`0.7x`, `0.49x`,
+   `0.343x`, ...). Reason: Round 5's worst epoch (25) comes exactly 1
+   epoch after a restart boundary (LR ~96% of peak), when the loss
+   landscape is already heterogeneous from rarity-weighting - a
+   full-strength restart at that point creates a double disruption.
+   The LR sequence was tested and confirmed - exact `0.7x` decay at
+   every restart.
+3. **Real beta-stats logging** (new function
+   `measure_attention_beta_stats`) - the real beta distribution
+   (min/p5/median/p95/max, floor-fraction) is printed during training
+   itself, on a fixed real batch, at every generation-check - not just
+   the phi-width proxy.
+
+**Verification: The Warning Fired Automatically**
+
+`run_generation_check` (with the new beta-stats logging) was tested in
+isolation on the Round 5 checkpoint - the **HIGH BETA HETEROGENEITY**
+warning fired automatically (p95/p5 > 50x threshold), the same problem
+that had been measured manually. Meaning if this problem happens again
+in Round 6, it'll be caught immediately, without having to wait for 40
+epochs to finish.
+
+A full warm-start (**147/147 tensors**) plus some real training steps
+were run, everything ran clean.
+
+**Independent Code-Level Verification (Cross-Check)**
+
+| Claim | Verified |
+|---|---|
+| `restart_decay` is a new parameter, default 0.7, formula `restart_decay ** cycle_index` | ✅ |
+| `char_rarity_max_weight` CLI default 10.0 → 4.0 | ✅ (loss.py's function-signature default stays 10.0 by design, since the actual value is passed as an argument from train_expert.py) |
+| `measure_attention_beta_stats` is a new, hook-based function that measures real beta | ✅ |
+| Beta heterogeneity warning triggers at `p95/p5 > 50x` | ✅ (Round 5 checkpoint's ratio came out to 129.68x, above the threshold) |
+| No Round 6 changes in `loss.py` | ✅ (by design - the new parameters are all passed as CLI arguments) |
+
+> **Phase 15 Verdict**
+> Round 5 improved loss considerably (`-1.2557` → `-7.1868`), but the
+> character-identity problem (Namaskar's first letter T-shaped, the
+> whole word fragmenting) still isn't solved. A new, concrete
+> mechanism was confirmed: rarity-weighting's uneven (1x-10x)
+> per-timestep weight is making beta heterogeneous (p95/p5 =
+> 129.68x), not causing collapse. Round 6 is ready with these three
+> fixes: lower max_weight (10→4), gentler progressive SGDR restarts,
+> and live beta-heterogeneity monitoring built into training.
+> `--warm_start_from` will now point to Round 5's checkpoint.
+
+---
+
 ## Section 8 - One-Line Summary of the Whole System (Recap for Beginners)
 
 If you want to build this system yourself, here's the crux of it:
