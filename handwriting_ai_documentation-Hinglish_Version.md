@@ -1,4 +1,4 @@
-# Handwriting Synthesis AI - Poori Documentation -(Hinglish Version)
+# Handwriting Synthesis AI - Poori Documentation (Hinglish Version)
 ### Zero se seekho: yeh AI kaise text ko human jaisi handwriting mein badalta hai
 
 Yeh document is tarah likha gaya hai ki agar tumhe coding aur AI ka bilkul
@@ -1391,6 +1391,100 @@ bina asli samasya solve kiye.
 > ceiling kam karna (jaise 10.0 ki jagah 3-4), aur/ya SGDR warm restarts
 > ko band karke dekhna ki kya sirf rarity-weighting akela (bina restart
 > ke double-disruption ke) zyada stable training deta hai.
+
+---
+
+### Phase 15 - Round 5 Ke Checkpoint Pe Deep-Dive Aur Round 6 Ki Taiyari
+
+Round 5 ke Verdict (Phase 14) mein jo remaining hypothesis chhoda gaya
+tha - ki `10.0x` ka max weight training ko destabilize karne ke liye
+kaafi zyada tha - usay isolate karke seedha real Round 5 checkpoint par
+test kiya gaya, aur uske aadhar par Round 6 ka code taiyar kiya gaya.
+
+**Setup:** Round 5 ka checkpoint load kiya gaya, confirm hua epoch 39,
+val_loss `-7.1868` - wahi checkpoint jispe Phase 14 ki saari testing
+hui thi.
+
+**Independent Confirmation: "Namaskar" Khud Generate Karke Dekha Gaya**
+
+Round 5 checkpoint se "Namaskar" independently generate kiya gaya:
+pehla letter genuinely **T-shaped** nikla, aur poora word poori tarah
+disconnected dashes mein fragment ho gaya (**36 pen-lifts**, ek 8-letter
+word ke liye bahut zyada). Yeh documentation ke Phase 14 wale claim se
+visually match hua.
+
+**Beta Ko Directly Measure Kiya Gaya (Hook Se, Real Data Par)**
+
+| Stat | Value |
+|---|---|
+| min | 0.100 |
+| p5 | 0.278 |
+| median | 5.69 |
+| p95 | 36.00 |
+| max | 299.14 |
+| fraction at floor | 0.33% |
+| p95/p5 ratio | 129.68x |
+
+Beta collapse nahi hua - median (5.69) Round 4 ke healthy median
+(2.56) se bhi sharp hai. Lekin spread bahut zyada heterogeneous ho
+gaya hai (0.10 se 299 tak). Yeh directly Phase 13 ke rarity-weighting
+se match karta hai: alag-alag timesteps par 1x se 10x tak ka uneven
+weight, ek hi sequence ke andar bahut alag gradient pressure banata
+hai, jisse beta timestep-se-timestep inconsistent ho jaata hai. Yeh
+pehle documented "attention_width volatility" (Phase 14 mein dekha
+gaya) ka concrete mechanism hai.
+
+**Round 6 Mein Teen Fixes (sab tested)**
+
+1. **`char_rarity_max_weight`: 10.0 → 4.0** - N ko ab bhi meaningful
+   weight (4.0x) milta hai, lekin heterogeneity ratio 8.15x se 3.26x
+   tak kam ho jaata hai. Table comparison se verify kiya gaya.
+2. **SGDR restart-decay** (naya `--restart_decay`, default `0.7`) - har
+   restart ka peak LR progressively gentler hota hai (`0.7x`, `0.49x`,
+   `0.343x`, ...). Wajah: Round 5 ka sabse bura epoch (25) restart-
+   boundary ke exactly 1 epoch baad aata hai (LR ~96% peak pe), jab
+   loss landscape already rarity-weighting se heterogeneous ho chuka
+   hota hai - full-strength restart us waqt double disruption banata
+   hai. LR sequence test karke confirm kiya gaya - exact `0.7x` decay
+   har restart pe.
+3. **Real beta-stats logging** (naya function
+   `measure_attention_beta_stats`) - training ke andar hi real beta
+   distribution (min/p5/median/p95/max, floor-fraction) har
+   generation-check pe ek fixed real batch par print hota hai, sirf
+   phi-width proxy nahi.
+
+**Verification: Warning Automatically Fire Hui**
+
+`run_generation_check` (naye beta-stats logging ke saath) Round 5
+checkpoint par isolation mein test kiya gaya - **HIGH BETA
+HETEROGENEITY** warning automatically fire hui (p95/p5 > 50x
+threshold), wahi problem jo manually measure ki gayi thi. Matlab agar
+Round 6 mein yeh problem dobara hui, turant pata chal jaayega, 40
+epochs khatam hone ka wait nahi karna padega.
+
+Poora warm-start (**147/147 tensors**) + kuch real training steps
+chalaye gaye, sab clean chala.
+
+**Independent Code-Level Verification (Cross-Check)**
+
+| Claim | Verified |
+|---|---|
+| `restart_decay` naya parameter, default 0.7, formula `restart_decay ** cycle_index` | ✅ |
+| `char_rarity_max_weight` CLI default 10.0 → 4.0 | ✅ (loss.py ka function-signature default 10.0 hi rehta hai by design, kyunki actual value train_expert.py se argument ki tarah pass hoti hai) |
+| `measure_attention_beta_stats` naya function, hook-based, real beta measure karta hai | ✅ |
+| Beta heterogeneity warning `p95/p5 > 50x` par trigger hoti hai | ✅ (Round 5 checkpoint ka ratio 129.68x nikla, threshold se upar) |
+| `loss.py` mein koi Round 6 change nahi | ✅ (by design - naye parameters sab CLI arguments ki tarah pass hote hain) |
+
+> **Phase 15 Verdict**
+> Round 5 ne loss kaafi behtar kiya (`-1.2557` → `-7.1868`), lekin
+> character-identity problem (Namaskar ka pehla letter T-shaped, poora
+> word fragment) abhi bhi solve nahi hua. Naya, concrete mechanism
+> confirm hua: rarity-weighting ka uneven (1x-10x) per-timestep weight
+> beta ko heterogeneous bana raha hai (p95/p5 = 129.68x), collapse
+> nahi kar raha. Round 6 in teen fixes ke saath ready hai: lower
+> max_weight (10→4), gentler progressive SGDR restarts, aur training
+> ke andar hi live beta-heterogeneity monitoring. `--warm_start_from`
+> ab Round 5 ke checkpoint ko point karega.
 
 ---
 
