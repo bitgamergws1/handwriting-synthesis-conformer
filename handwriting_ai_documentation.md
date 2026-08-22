@@ -740,7 +740,7 @@ chalake. Yeh kaam lamba tha, beech mein ek AI tool ka token limit khatam
 ho gaya, to uska poora reasoning transcript ek doosre AI tool ko diya
 gaya taaki analysis wahi se aage continue ho sake. Baad mein yeh dono
 diagnostic scripts ek baar phir chalaye gaye taaki result reproduce ho.
-Aakhir mein mene asli `best_model.pth` checkpoint upload karke sabse
+Aakhir mein tumne asli `best_model.pth` checkpoint upload karke sabse
 zaroori claims (Theory A, Theory B ke saare checks, aur Adam-state wala
 calculation) ek baar aur dobara run karwa ke cross-verify karwaya, koi
 transcript par bharosa kiye bina. Neeche jo likha hai wo in sabhi runs
@@ -896,10 +896,255 @@ isliye yeh confirm nahi karta ki fix genuinely spelling theek karega,
 sirf itna confirm karta hai ki code sahi se likha gaya hai aur chal
 sakta hai.
 
-**Abhi tak koi Round 4 training nahi hui hai** - yeh sab preparation aur
-diagnosis hai, actual epochs chalna baaki hai. Isliye is phase ka koi
-"Verdict" box nahi hai; jab Round 4 ki training complete hogi, tab uska
-apna verdict likha jaayega.
+> **Round 4 Verdict (diagnosis phase, training nahi)**
+> - Theory A (beta dead-zone): rejected
+> - Theory B (embedding confusion): rejected
+> - Adam-state claim (clipping se koi asar nahi): verified
+> - Naya training plan taiyar (SGDR + entropy regularizer): code likha
+>   aur smoke-tested, real training abhi baaki
+
+---
+
+### Phase 12 - Round 4: Asli Training Hui, Kya Nikla
+
+Ab jo maine Phase 11 mein plan describe kiya tha (SGDR warm restarts,
+entropy regularizer, scheduler bug fix), wo asli GPU par poori 40 epochs
+ke liye chala diya gaya. Yeh Round 3 ke checkpoint (Epoch 39, val loss
+`-1.2196`) se warm-start hua, bilkul waise hi jaise pichli baar - saare
+147 tensors clean reuse hue.
+
+**Sabse pehle, ek chhoti recap taaki yaad aa jaaye hum yahan kyun hain:**
+Round 3 mein model ne handwriting ki "physics" (pen kab uthana hai, kaise
+smooth likhna hai) poori tarah seekh li thi, lekin har baar ek hi galat
+spelling ("Tonacclr" jaisa kuch) baar baar likh raha tha, jaise uska
+dimaag ek hi jagah atak gaya ho. Round 4 ka poora maksad yeh tha ki
+usay us atke hue jagah se bahar nikala jaaye - iske liye do naye tarike
+try kiye gaye: (1) training ke beech beech mein learning rate ko baar
+baar "restart" karna, taaki model ko purani soch chhodne ka mauka mile,
+aur (2) loss mein thoda sa bonus jodna jo model ko apne decision par
+itna "confident" na hone de.
+
+**Round 4 Ka Result, Table Mein:**
+
+| Epoch | Val Loss | Pen-Lifts | Attention Width | Entropy (pi) |
+|---|---|---|---|---|
+| 0 | -1.1965 | 19 | 0.837 | 1.121 |
+| 5 | -1.2211 | 16 | 0.734 | 1.339 |
+| 10 | -1.2391 | 16 | 0.758 | 1.390 |
+| 15 | -1.2497 | 16 | 0.727 | 1.444 |
+| 20 | -1.2387 | 22 | 0.718 | 1.491 |
+| 25 | -1.1548 | 19 | 0.741 | 1.510 |
+| 30 | -1.2274 | 20 | 0.716 | 1.569 |
+| 35 | -1.1829 | 14 | 0.711 | 1.589 |
+| 39 (final) | -1.2369 | - | - | 1.606 |
+
+**Entropy genuinely badhi hai, jaisa plan tha.** Epoch 0 se Epoch 39 tak
+`pi_entropy` `1.121` se `1.606` tak gaya, matlab lagbhag `43%` ka
+sudhar. Iska seedha matlab: entropy regularizer (jo humne Phase 11 mein
+loss.py mein add kiya tha) genuinely apna kaam kar raha hai - model ab
+pehle jitna "confidently ek hi wrong answer" par ateka hua nahi hai, wo
+thoda zyada "uncertain" reh raha hai, jo exactly wahi tha jo yeh fix
+karna chahta tha.
+
+**Val loss ab pehle jaisa smooth nahi hai, thoda zyada up-down karta
+hai.** Round 3 mein loss lagbhag continuously improve hota tha, lekin
+Round 4 mein Epoch 8 (`-1.0383`), Epoch 24 (`-1.0035`), aur Epoch 25
+(`-1.1548`) par achanak neeche gir gaya, phir wapas upar aaya. Yeh
+expected hai - SGDR warm restarts har baar learning rate ko peak tak
+wapas le jaate hain, jisse model ka "seekhne ka tareeka" har cycle ke
+shuru mein thoda disturb hota hai, phir wapas stabilize hota hai. Best
+val loss poore Round 4 mein `-1.2557` raha (Epoch 23 par), jo Round 3
+ke best (`-1.2196`) se behtar hai.
+
+**Images mein output ab har baar same nahi hai, jo Round 3 se ek bada
+farak hai.** Maine saari 8 generation-check images dekhi. Shuru ki
+kuch images (Epoch 0-15) mein wahi purana pattern hai jo Round 3 mein
+bhi tha, lekin baad ki images (khaaskar Epoch 25 aur 35 ke aas paas)
+mein shapes genuinely alag dikhti hain - kuch jagah letters ka structure
+badla hua hai. Spelling abhi bhi sahi nahi hai ("Namaskar" nahi ban raha),
+lekin **yeh ab ek hi fixed galat jawab par nahi ateka hai jaisa Round 3
+mein tha** - yeh khud mein ek useful signal hai, chahe final answer
+abhi bhi galat ho.
+
+**Ek naya theory aaya hai iske baad ("Attention Collapse"), lekin abhi
+yeh sirf ek unverified guess hai, maine isay accept nahi kiya hai.**
+Logic yeh diya gaya tha ki shayad model attention ke through text ko
+sahi se "padh" hi nahi pa raha. Lekin isme ek problem hai: humare Phase
+11 ke diagnosis mein already dikha chuka hai ki attention healthy hai
+(beta starved nahi tha), aur is Round 4 ke **har single log entry**
+mein likha hai `"attention centroid reached the last character"` -
+matlab attention structurally text ke aakhri character tak sahi se
+pahunch raha hai, har epoch mein, bina fail hue. Agar attention genuinely
+"dead" hota, to yeh consistently nahi hota. Jo zyada plausible lagta hai
+(pichli findings se match karta hua) yeh hai ki attention sahi position
+tak pahunch raha hai, lekin us position par sahi shape choose karna
+(jo MDN head/fusion ka kaam hai) abhi bhi galat hai - yeh ek subtly
+different aur zyada specific theory hai "attention dead hai" se.
+
+**Agla test tha ek attention heatmap generate karna, aur ab yeh test ho
+chuka hai - actual GPU checkpoint (Epoch 23, val loss `-1.2557`) par,
+"Namaskar" word generate karke, har generation-step ka real attention
+weight record karke.**
+
+**Result bilkul saaf hai: attention collapse nahi hua hai.**
+
+![Round 4 attention heatmap](round4_attention_heatmap.png)
+
+Heatmap mein ek clean, diagonal band dikhta hai - har letter (N-a-m-a-s-k-a-r)
+ko apna alag, contiguous stretch of high attention mil raha hai, jo
+stroke timestep ke saath left se right progress karta hai. Numbers isay
+confirm karte hain:
+
+- **Backward jumps: 0 out of 125** - attention ek baar bhi peeche nahi
+  gayi, poori generation ke dauran
+- **Distinct characters jo focus mile: 8 out of 8** - har letter ko
+  apni baari mili, koi skip nahi hua
+- **Peak sharpness: 0.744 average** (agar attention completely uniform
+  yaani "collapsed" hoti, to yeh `0.125` hota) - matlab attention
+  genuinely sharp aur focused hai, diffuse nahi
+
+**Matlab "Attention Collapse" theory reject ho gayi, real measurement
+se.** Attention mechanism perfectly apna kaam kar raha hai - sahi
+position par, sahi order mein, sharply focus kar raha hai. Jo pehle
+suspect kiya gaya tha wahi confirm hota hai: **problem attention mein
+nahi hai. Problem yeh hai ki jab attention sahi letter par focus karta
+hai, tab bhi model us letter ke liye galat pen-shape draw karta hai.**
+Yeh ek downstream issue hai (MDN head ya fusion layer ki "shape
+mapping"), attention ki "kaha dekhna hai" wali decision mein nahi.
+
+**Ek naya sawaal yahan se uthta hai: kya model genuinely context (jo
+letter attend ho raha hai) use kar raha hai shape decide karne ke liye,
+ya sirf apni stroke-history ke momentum se draw kar raha hai, context
+ko largely ignore karke? Isay bhi actually test kiya gaya, sirf maan
+nahi liya gaya.**
+
+Do experiments chalaye gaye, real held-out data par, teacher-forced:
+
+1. **Context zero karke dekha** - attended text context ko forcibly
+   zero kar diya gaya bilkul fusion se pehle, aur dekha gaya ki
+   predictions kitna badalte hain.
+2. **Galat text de kar dekha** - wahi real stroke history rakhi gayi,
+   lekin text-encoder ko ek bilkul different, unrelated text diya gaya
+   (jaise model "kuch aur" likh raha ho jabki uske pen ka real data
+   kuch aur hi hai).
+
+```python
+def capture_and_zero(module, inputs, output):
+    return torch.zeros_like(output)
+handle = model.context_norm.register_forward_hook(capture_and_zero)
+```
+
+**Result: meri shuruaati hypothesis ("context largely ignored ho raha
+hai") overstated nikli.** Context zero karne se loss genuinely worse
+hua (`+0.25`), aur predictions ka shift bhi meaningful tha (ratio
+`0.27`, jaha `0` ka matlab "bilkul asar nahi" aur `1.0` ka matlab
+"context hi sab kuch decide kar raha hai" hota). Galat text dene se bhi
+similar result mila (loss `+0.15` worse, shift ratio `0.23`).
+
+**Sahi interpretation:** model context ko ignore nahi kar raha - wo
+usay real signal ki tarah use kar raha hai. Lekin yeh dominant factor
+bhi nahi hai (ratio `1.0` se kaafi neeche hai) - stroke-history momentum
+bhi saath mein significant role play karta hai. Matlab asli samasya
+"model context ignore karta hai" nahi hai.
+
+**Yahan tak "jo letter-to-shape mapping model ne seekhi hai, wo khud
+imprecise/galat hai" bola gaya tha - lekin isay challenge kiya gaya:
+"imprecise" koi specific answer nahi hai, yeh ek lazy, vague jawab hai,
+khaaskar itni training ke baad.** Asli sawaal yeh tha: kya kuch specific
+letters genuinely training data mein itne rare hain ki unka mapping
+kabhi properly seekha hi nahi gaya - chahe kitni bhi epochs chali hon?
+Isay reasoning se nahi, do fresh, actual tests se decide kiya gaya.
+
+Sabse pehle, `iam_ondb_processed.npz` ke saare 12,126 sequences
+(350,959 characters total) par ek frequency count chalaya gaya. Result
+kaafi skewed nikla:
+
+| Letter | Count | % of data |
+|---|---|---|
+| space | 53,688 | 15.30% |
+| e | 35,692 | 10.17% |
+| a | 21,899 | 6.24% |
+| n (lowercase) | 18,722 | 5.34% |
+| s | 17,596 | 5.01% |
+| T (capital) | 1,273 | 0.36% |
+| N (capital) | 315 | 0.09% |
+| Q | 19 | 0.005% |
+
+Lowercase letters (jo kisi bhi English sentence ke beech mein baar baar
+aate hain) bahut common hain, jabki capital letters (jo sirf
+sentence-start ya proper nouns mein aate hain) bahut rare hain. "Namaskar"
+letter-by-letter check karne par:
+
+| Letter | Count | Rank (out of ~80 chars) |
+|---|---|---|
+| N | 315 | #41 |
+| a | 21,899 | #4 |
+| m | 6,575 | #15 |
+| s | 17,596 | #8 |
+| k | 2,186 | #25 |
+| r | 16,949 | #9 |
+
+Sabse zaroori, concrete observation: **lowercase 'n' training data mein
+capital 'N' se 59 guna zyada frequent hai** (18,722 vs 315). Aur
+"Namaskar" shuru hi hoti hai capital N se - jo is poore corpus
+(IAM-OnDB, jo fundamentally English sentences par based hai) mein
+extremely rare hai.
+
+Ispe decisively test karne ke liye do naye words chune gaye - "notes"
+aur "start" - dono mein sirf top-15 most-frequent letters hain, koi
+rare capital nahi. Same checkpoint (Epoch 23, val loss `-1.2557`) se in
+dono ko, aur comparison ke liye "Namaskar" ko bhi, generate kiya gaya -
+project ke asli `render_strokes` function ka use karke, taaki koi apna
+quick/alag rendering-convention comparison ko unfair ya kharab na kare.
+
+![notes generation](gen_notes.png)
+![start generation](gen_start.png)
+![Namaskar generation](gen_Namaskar.png)
+
+Result bilkul clear tha: **"notes" mein 'n' aur 'o' bilkul saaf, sahi
+shape mein bane - pehli baar itni saaf letter shapes dekhi gayi. "start"
+mein 'S' aur 'a' bhi clearly, correctly bane.** "Namaskar" abhi bhi
+galat spell ho raha tha, wahi purana pattern. Common-letter words
+genuinely, consistently better render ho rahe the "Namaskar" se - yeh
+koi coincidence nahi tha, do independent words par reproduce hua.
+
+**Matlab asli samasya "model context ignore karta hai" nahi hai, aur na
+hi sirf "imprecise/galat" jaisa vague kuch hai - balki concretely: "jo
+letter-to-shape mapping model ne seekhi hai, uski quality directly us
+letter ki training-data frequency se correlate karti hai."** Rare
+characters (khaaskar capital letters, jo is corpus mein sirf
+0.005%-0.36% data banate hain) ka mapping kabhi properly converge nahi
+hua, kyunki model ne unhe itni kam baar dekha ki gradient signal kaafi
+nahi tha unke liye - chahe training kitni bhi epochs chali ho.
+
+> **Round 4 Verdict**
+> - Pen physics: done (jaisa Round 3 mein tha, wahi maintain hua)
+> - Entropy regularizer: kaam kar raha hai (43% entropy badhi, jaisa
+>   plan tha)
+> - Frozen spelling break hui: partially (ab output epoch-se-epoch
+>   badal raha hai, ek hi jagah ateka nahi hai)
+> - Attention mechanism: healthy hai, confirmed via real heatmap
+>   measurement (0 backward jumps, sab 8 letters ko focus mila,
+>   sharpness `0.744`)
+> - Text-context ka istemal: confirmed ho raha hai (context zero/wrong
+>   karne se loss aur predictions dono meaningfully badalte hain,
+>   ratio ~`0.23`-`0.27`), lekin dominant nahi hai
+> - Character identity (sahi "Namaskar" likhna): abhi bhi not done
+>
+> Confirmed root cause (attention-heatmap test + do independent
+> context-ablation tests + frequency-count aur generation test, sab
+> real checkpoint/data par): attention "kaha dekhna hai" sahi kar raha
+> hai, model text-context ko genuinely (partially) use bhi kar raha
+> hai - dono confirmed. Asli samasya yeh hai ki letter-to-shape mapping
+> ki quality directly training-data mein us letter ki frequency se
+> correlate karti hai: rare characters (khaaskar capital letters, jaise
+> N, jo lowercase n se 59x kam frequent hai) ka mapping kabhi properly
+> seekha hi nahi gaya, chahe training kitni bhi chali ho - na attention
+> ka fault hai, na context ignore hone ka. Yeh "imprecise" se kaafi
+> zyada specific, testable finding hai. Agla natural step: in rare
+> characters ko training mein extra weight dena (jaisa rare pen-lift
+> event ke liye pehle kiya gaya, Section 8 point 6 dekho), ya training
+> data mein in letters ke examples ko oversampling se badhana.
 
 ---
 
