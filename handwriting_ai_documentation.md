@@ -1150,9 +1150,9 @@ nahi tha unke liye - chahe training kitni bhi epochs chali ho.
 
 ### Phase 13 - Round 4 Khatam, Round 5 Shuru Karne Se Pehle: Naya Code, Naya Bug Mila
 
-Phase 12 mein jo root cause mila tha — letter-to-shape mapping ki quality
+Phase 12 mein jo root cause mila tha, ki letter-to-shape mapping ki quality
 directly training-data mein us letter ki frequency se correlate karti
-hai — usko fix karne ke liye decision liya gaya: ek naya training round
+hai, usko fix karne ke liye decision liya gaya: ek naya training round
 (**Round 5**) chalaya jaayega jisme training ke dauraan hi rare
 characters (jaise capital N) ko extra weight diya jaayega, taaki unka
 mapping properly seekha ja sake. Isके liye do files chahiye the:
@@ -1279,6 +1279,118 @@ training steps chalaye gaye, aur sab kuch stable/finite raha.
 > loss se bahar na ho jaaye. `loss.py` aur `train_expert.py` dono
 > updated files ready hain, `--warm_start_from` ab Round 4 ke
 > checkpoint ko point karega.
+
+---
+
+### Phase 14 - Round 5 Ki Asli Training: Kya Hua, Kya Nahi
+
+Phase 13 ka code ready hone ke baad Round 5 ki poori 40-epoch training
+GPU par chalayi gayi, Round 4 ke best checkpoint (Epoch 23, val loss
+`-1.2557`) se warm-start karke. Neeche jo bhi likha hai, wo asli
+`.log` file ko line-by-line padh kar verify kiya gaya hai.
+
+**Sabse pehle, table mein poori journey:**
+
+| Epoch | Val Stroke NLL | Pen-Lifts | Attention Width | Max Points Hit? |
+|---|---|---|---|---|
+| 0 | -3.94 | 21 | 0.882 | nahi |
+| 5 | -7.41 | **57** | 1.434 | **haan (400/400)** |
+| 10 | -7.32 | 21 | 0.452 | nahi |
+| 15 | -7.49 | 23 | 1.321 | nahi |
+| 20 | -7.50 | 22 | 1.262 | nahi |
+| 25 | -7.32 | **135** | 0.736 | **haan (400/400)** |
+| 30 | -7.62 | **81** | 1.107 | **haan (400/400)** |
+| 35 | -7.66 | 23 | 1.025 | nahi |
+| 39 (final) | -7.72 | - | - | - |
+
+![Round 5 epoch 0 generation check](images/round5_epoch_000.png)
+![Round 5 epoch 5 generation check](images/round5_epoch_005.png)
+![Round 5 epoch 10 generation check](images/round5_epoch_010.png)
+![Round 5 epoch 15 generation check](images/round5_epoch_015.png)
+![Round 5 epoch 20 generation check](images/round5_epoch_020.png)
+![Round 5 epoch 25 generation check](images/round5_epoch_025.png)
+![Round 5 epoch 30 generation check](images/round5_epoch_030.png)
+![Round 5 epoch 35 generation check](images/round5_epoch_035.png)
+
+**Log file se confirm hui cheezein:**
+- Epoch 5, 25, aur 30 par model genuinely `max_steps=400` tak pahunch
+  gaya bina text khatam kiye - yeh log mein exactly likha hai
+- Epoch 25 par genuinely `135 pen-lifts` hui - ek normal handwriting
+  ke liye yeh bahut zyada hai
+- Un teeno "bad" epochs (5, 25, 30) ki generation-check images mein
+  sach mein bikhre hue, disconnected dots aur dashes dikhte hain -
+  bilkul waisa jaisa itni zyada pen-lifts se expect hoga
+
+**Ek chhoti si cheez jo clarify karni zaroori hai: log mein `-11.77`
+jaisa ek bada number dikhta hai, jo dekh kar lagega ki koi bada crash
+hua ho.** Exact line yeh hai:
+
+```
+[epoch 26 step 250/365] stroke_nll=-11.7718
+```
+
+Yeh **poore Epoch 26 ka average nahi hai** - yeh sirf ek single
+mid-epoch mini-batch step hai, 365 steps mein se ek. Epoch 26 ka asli
+average (jo training progress ko represent karta hai) tha `train
+stroke_nll=-6.19`, `val stroke_nll=-7.46` - bilkul normal range mein,
+koi crash nahi. Training logs mein individual steps ka number hamesha
+upar-neeche hota rehta hai (Round 3/4 ke logs mein bhi aisa hota tha,
+sirf unki magnitude chhoti thi kyunki loss ka scale khud chhota tha) -
+yeh sirf epoch-level average hi asli progress dikhata hai, single step
+nahi.
+
+**Do naye findings jo verify karte waqt mile:**
+
+**1. Poora loss scale hi badal gaya hai - purane rounds se seedha
+compare karna galat hoga.** Round 4 ka final val stroke_nll tha
+`-1.73`. Round 5 ka hai `-7.72` - matlab lagbhag **4.47 guna bada**.
+Yeh koi instability ka sign nahi hai, balki khud rarity-weighting ka
+expected side-effect hai: formula `(max_count/count)^0.5` ke through
+"Namaskar" ke common letters (a, m, s, r) ko bhi already `1.5x` se
+`2.9x` tak weight mil rahi hai (Phase 13 ka table dekho), aur poore
+training corpus (jisme punctuation, digits, capitals sab hain) ka
+average timestep-weight `4` se `5x` ke aas paas ban sakta hai. Matlab
+**Round 5 ke raw loss numbers ko Round 3/4 se seedha compare karna hi
+galat tarika hai** - scale hi alag hai ab.
+
+**2. Attention_width genuinely zyada volatile ho gaya hai - yeh ek
+real, verified instability hai.** Round 4 mein attention_width tight
+range mein tha (`0.71` se `0.84`, average `0.743`). Round 5 mein yeh
+`0.45` se `1.43` tak swing karta hai (average `1.027`, khud `1.0` ke
+upar). Round 3/4 mein attention kabhi `1.0` cross nahi hui thi. Yeh ek
+concrete, naapa hua sign hai ki attention mechanism is round mein
+genuinely disturb hua.
+
+**3. Sabse important, thodi nirash karne wali baat: jin checkpoints mein
+output stable tha (Epoch 0, 10, 15, 20, 35), unme bhi pehla letter
+abhi bhi "N" jaisa nahi, "T" jaisa hi dikhta hai.** Matlab poori Phase
+13 ki rarity-weighting - jiski theory sahi verify hui thi (Phase 12
+mein character-frequency wala real proof), aur jiska code bhi carefully
+test kiya gaya tha - **apna original target (N ko sahi banana) 40
+epochs mein achieve nahi kar payi**. Theory galat nahi thi, lekin
+`10.0x` jitni aggressive weight shayad zaroorat se zyada thi - usne
+training ko disturb kiya (attention volatility, periodic stuttering)
+bina asli samasya solve kiye.
+
+> **Round 5 Verdict**
+> - Character-rarity theory: confirmed sahi thi (Phase 12 mein proof
+>   mila), aur implementation bhi bug-free thi (Phase 13 mein verify
+>   hui)
+> - Training stability: partially disturbed - attention_width ab
+>   zyada volatile hai (range `0.45`-`1.43` vs Round 4 ka tight
+>   `0.71`-`0.84`), aur teen epochs (5, 25, 30) mein genuine stuttering
+>   dikha (57-135 pen-lifts, max_steps hit hona)
+> - "N" ka spelling fix: abhi bhi not done - stable checkpoints mein
+>   bhi 'N' ki jagah 'T'-jaisa shape hi ban raha hai
+> - Loss numbers: naya scale hai (~4.5x bada), purane rounds se seedha
+>   compare mat karna
+>
+> Remaining hypothesis: `10.0x` ka max weight training ko destabilize
+> karne ke liye kaafi zyada tha, is se model ko meaningfully "N" seekhne
+> mein madad nahi mili itne kam epochs mein. Agla step: weight ki
+> ceiling kam karna (jaise 10.0 ki jagah 3-4), aur/ya SGDR warm restarts
+> ko band karke dekhna ki kya sirf rarity-weighting akela (bina restart
+> ke double-disruption ke) zyada stable training deta hai.
 
 ---
 
