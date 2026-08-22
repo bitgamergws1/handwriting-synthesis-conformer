@@ -1148,6 +1148,140 @@ nahi tha unke liye - chahe training kitni bhi epochs chali ho.
 
 ---
 
+### Phase 13 - Round 4 Khatam, Round 5 Shuru Karne Se Pehle: Naya Code, Naya Bug Mila
+
+Phase 12 mein jo root cause mila tha — letter-to-shape mapping ki quality
+directly training-data mein us letter ki frequency se correlate karti
+hai — usko fix karne ke liye decision liya gaya: ek naya training round
+(**Round 5**) chalaya jaayega jisme training ke dauraan hi rare
+characters (jaise capital N) ko extra weight diya jaayega, taaki unka
+mapping properly seekha ja sake. Isके liye do files chahiye the:
+`loss.py` (rarity-weighting ka logic) aur `train_expert.py` (usay
+training loop mein wire karna). Documentation aur Phase 12 ki frequency
+findings ko dobara verify nahi kiya gaya - wo already establish ho
+chuke the. Sirf naya code likha gaya aur usay pure code-correctness ki
+tarah test kiya gaya.
+
+**Setup:** Round 4 ka checkpoint (`best_model.zip`) load kiya gaya -
+confirm hua epoch 23, val_loss `-1.2557`, wahi checkpoint jispe saari
+Phase 12 ki testing hui thi.
+
+**Ek Real Bug Mila - Poore Mechanism Ko Defeat Kar Raha Tha**
+
+Uploaded `loss.py` mein ek function tha `compute_char_rarity_weights`,
+jiska kaam tha har character ko uski rarity ke hisaab se ek "weight"
+dena (rare character = zyada weight, taaki training usay zyada dhyan
+de). Isay test karne ke liye poora weight table print karke dekha gaya
+- aur result bilkul ulta nikla:
+
+- "Namaskar" ke saare letters (N, a, m, s, k, r) sabko weight = **1.0**
+  mil raha tha - matlab koi extra weight nahi.
+- Jabki `[`, `]`, `*`, `&` jaise bilkul irrelevant, kabhi-kabhaar hi
+  use hone waale symbols ko max weight **10.0** mil raha tha.
+
+Yeh bilkul ulta tha jo chahiye tha - jo mechanism rare letters (N)
+help karne ke liye bana tha, wo unhe bilkul help nahi kar raha tha.
+
+**Wajah Kya Thi**
+
+Function reference point ke roop mein **median count** use kar raha
+tha. Is project ka vocab 83 characters ka hai, aur usme se lagbhag
+aadha (~40) rare punctuation/symbols hain jo kabhi ya bahut kam use
+hote hain. Isliye jab saare 83 characters ki count ka median nikala
+gaya, wo **311** aaya - jo bilkul N ki count (**315**) ke bagal mein
+hai. Matlab: top 43 "asli" letters (jisme N bhi shaamil hai) sab median
+se **upar** the, isliye unka weight formula clamp floor (1.0) pe hi
+atak gaya. Sirf neeche wale ~40 rare symbols hi asal mein "rare" treat
+ho rahe the - jo galat hai, kyunki unka training pe koi matlab hi nahi.
+
+**Fix**
+
+Reference ko median se badal kar **max_count** (jo is dataset mein
+space hai, count = 53,688) kar diya gaya. Isse ab har character ka
+weight ek smooth, continuously-increasing scale pe aata hai, ek
+step-function ki tarah nahi. Fix ke baad table:
+
+| Letter | Count | Weight (fixed) |
+|---|---|---|
+| N | 315 | 10.0 (max, sahi hai) |
+| k | 2,186 | 4.96 |
+| m | 6,575 | 2.86 |
+| a | 21,899 | 1.57 |
+| s | 17,596 | 1.75 |
+| r | 16,949 | 1.78 |
+
+Ab N ko sabse zyada weight mil raha hai (jo bilkul sahi hai, kyunki
+wahi sabse zyada under-trained letter hai, Phase 12 mein diagnose hua),
+aur baaki letters ko unki apni rarity ke hisaab se ek differentiated
+weight mil raha hai.
+
+**Ek Aur Chhota Lekin Zaroori Defensive Fix**
+
+Timestep-level weight nikalne wale function mein ek edge case tha:
+agar kisi timestep par model ka attention (`phi`) near-zero ho jaaye
+(abhi ke stable checkpoint mein aisa nahi hota, lekin Round 5 ki
+training shuru hone ke pehle kuch steps mein ho sakta hai, jab loss
+landscape thoda unstable hota hai), to purana code us timestep ka
+weight silently **0** bana deta - jiska matlab hota us timestep ka
+poora loss contribution hi gayab ho jaana, sirf "extra weight na
+milna" nahi. Fix karke ab aisi situation mein weight neutral **1.0**
+ho jata hai (yani Round 4 jaisa normal behavior), 0 nahi. Ek synthetic
+(fake all-zero phi) test bana kar isay confirm kiya gaya.
+
+**Poora Pipeline End-To-End Test Kiya Gaya**
+
+Real epoch-23 checkpoint aur real training data ke saath poora
+pipeline chalaya gaya - model forward pass, rarity weight compute,
+loss compute, aur backward pass. Result: loss ek normal number aaya,
+sab gradients finite the (koi NaN/Inf nahi), koi bhi parameter bina
+gradient ke nahi raha.
+
+**`train_expert.py` Mein Wire Kiya Gaya**
+
+- Naye CLI arguments: `--use_char_rarity_weighting` (default ON),
+  `--char_rarity_smoothing`, `--char_rarity_min`, `--char_rarity_max`
+  - sab tunable.
+- Har run mein character frequency **live** training-split se compute
+  hoti hai - koi hardcoded number nahi, taaki agar data thoda change
+  ho to weight table apne aap sahi rahe.
+- Ek naya file `char_frequency_chart.png` automatically checkpoint
+  folder mein save hota hai - poori vocabulary ka frequency bar chart
+  (log scale) aur uske upar assigned rarity weight ka curve, dono ek
+  hi chart mein.
+- `run_epoch_v2` mein wire kiya gaya - training aur validation, dono
+  mein apply hota hai, aur model ka **real, current attention**
+  (`out.phi`) use karke, koi hardcoded ya guessed alignment nahi.
+
+![Character frequency and Phase 13 rarity weight](images/char_frequency_chart.png)
+
+Chart mein saaf dikhta hai: bayi taraf (sabse common letters jaise e,
+t, a) ka weight lagbhag 1.0 ke paas hai, aur jaise-jaise frequency
+ghatti hai weight curve smoothly upar jaata hai, jab tak 10.0 ki
+ceiling tak nahi pahunch jaata (jahan N bhi aata hai, aur usse rare
+saare symbols bhi).
+
+**Final Verification**
+
+Real epoch-23 checkpoint se poora warm-start test kiya gaya (saare
+**147/147 tensors** load hue), frequency chart generate hui, kuch real
+training steps chalaye gaye, aur sab kuch stable/finite raha.
+
+> **Phase 13 Verdict**
+> Round 5 ke liye code ready hai. Ek genuine, silent bug mila aur fix
+> hua (`compute_char_rarity_weights` galat reference point [median]
+> use kar raha tha, jisse poora rarity-weighting mechanism ulta kaam
+> kar raha tha - rare letters ko normal weight, irrelevant rare
+> symbols ko max weight). Fix (max_count reference) ke baad table
+> sahi, differentiated weights deta hai, jisme N (Namaskar ka sabse
+> problematic letter) ko sabse zyada weight milta hai. Ek defensive
+> edge-case fix (degenerate phi → neutral fallback, 0 nahi) bhi add
+> kiya gaya taaki fresh training ke shuru mein koi timestep silently
+> loss se bahar na ho jaaye. `loss.py` aur `train_expert.py` dono
+> updated files ready hain, `--warm_start_from` ab Round 4 ke
+> checkpoint ko point karega.
+
+---
+
 ## Section 8 - Poore System Ka Ek-Line Summary (Beginner Ke Liye Recap)
 
 Agar tum khud yeh system banana chaho to yeh crux hai:
