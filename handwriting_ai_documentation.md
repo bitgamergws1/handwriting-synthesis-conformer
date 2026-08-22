@@ -988,7 +988,7 @@ weight record karke.**
 
 **Result bilkul saaf hai: attention collapse nahi hua hai.**
 
-![Round 4 attention heatmap](round4_attention_heatmap.png)
+![Round 4 attention heatmap](images/round4_attention_heatmap.png)
 
 Heatmap mein ek clean, diagonal band dikhta hai - har letter (N-a-m-a-s-k-a-r)
 ko apna alag, contiguous stretch of high attention mil raha hai, jo
@@ -1097,9 +1097,9 @@ dono ko, aur comparison ke liye "Namaskar" ko bhi, generate kiya gaya -
 project ke asli `render_strokes` function ka use karke, taaki koi apna
 quick/alag rendering-convention comparison ko unfair ya kharab na kare.
 
-![notes generation](gen_notes.png)
-![start generation](gen_start.png)
-![Namaskar generation](gen_Namaskar.png)
+![notes generation](images/gen_notes.png)
+![start generation](images/gen_start.png)
+![Namaskar generation](images/gen_Namaskar.png)
 
 Result bilkul clear tha: **"notes" mein 'n' aur 'o' bilkul saaf, sahi
 shape mein bane - pehli baar itni saaf letter shapes dekhi gayi. "start"
