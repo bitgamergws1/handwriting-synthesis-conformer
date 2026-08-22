@@ -1,4 +1,4 @@
-# Handwriting Synthesis AI - Complete Documentation -English Version
+# Handwriting Synthesis AI - Complete Documentation (English Version)
 ### Learn from zero: how this AI turns text into human-like handwriting
 
 This document is written so that even if you have absolutely no background
@@ -1263,90 +1263,114 @@ real training steps were run, and everything stayed stable/finite.
 
 ---
 
-### Phase 14 - Round 5's Result and Round 6's Preparation
+### Phase 14 - Round 5's Actual Training: What Happened, What Didn't
 
-**Round 5 Checkpoint Facts**
+Once Phase 13's code was ready, the full 40-epoch Round 5 training was
+run on the GPU, warm-started from Round 4's best checkpoint (Epoch 23,
+val loss `-1.2557`). Everything written below has been verified by
+reading the actual `.log` file line by line.
 
-| Metric | Value |
-|---|---|
-| Epoch | 39 |
-| val_loss | -7.1868 |
-| Compared to Round 4's val_loss | -1.2557 → -7.1868 (considerably better) |
+**First, the full journey in a table:**
 
-**What Came Out of "Namaskar" Generation**
+| Epoch | Val Stroke NLL | Pen-Lifts | Attention Width | Max Points Hit? |
+|---|---|---|---|---|
+| 0 | -3.94 | 21 | 0.882 | no |
+| 5 | -7.41 | **57** | 1.434 | **yes (400/400)** |
+| 10 | -7.32 | 21 | 0.452 | no |
+| 15 | -7.49 | 23 | 1.321 | no |
+| 20 | -7.50 | 22 | 1.262 | no |
+| 25 | -7.32 | **135** | 0.736 | **yes (400/400)** |
+| 30 | -7.62 | **81** | 1.107 | **yes (400/400)** |
+| 35 | -7.66 | 23 | 1.025 | no |
+| 39 (final) | -7.72 | - | - | - |
 
-"Namaskar" was independently generated from the Round 5 checkpoint: the
-first letter still came out **T-shaped**, and the entire word
-fragmented into **36 pen-lifts** of disconnected dashes (far too many
-for an 8-letter word). This visually matched the documentation's
-previous claim.
+![Round 5 epoch 0 generation check](images/round5_epoch_000.png)
+![Round 5 epoch 5 generation check](images/round5_epoch_005.png)
+![Round 5 epoch 10 generation check](images/round5_epoch_010.png)
+![Round 5 epoch 15 generation check](images/round5_epoch_015.png)
+![Round 5 epoch 20 generation check](images/round5_epoch_020.png)
+![Round 5 epoch 25 generation check](images/round5_epoch_025.png)
+![Round 5 epoch 30 generation check](images/round5_epoch_030.png)
+![Round 5 epoch 35 generation check](images/round5_epoch_035.png)
 
-**Real Measurements of Beta (Attention Sharpness)**
+**Things confirmed from the log file:**
+- At Epoch 5, 25, and 30 the model genuinely reached `max_steps=400`
+  without finishing the text - this is written exactly like that in the
+  log
+- At Epoch 25 there were genuinely `135 pen-lifts` - far too many for
+  normal handwriting
+- The generation-check images for those three "bad" epochs (5, 25, 30)
+  genuinely show scattered, disconnected dots and dashes - exactly what
+  you'd expect from so many pen-lifts
 
-| Stat | Value |
-|---|---|
-| min | 0.100 |
-| p5 | 0.278 |
-| median | 5.69 |
-| p95 | 36.00 |
-| max | 299.14 |
-| fraction at floor | 0.33% |
-| p95/p5 ratio | 129.68x |
+**One small thing worth clarifying: the log shows a big number like
+`-11.77`, which looks like it could mean some big crash happened.** The
+exact line is:
 
-Beta did not collapse - the median (5.69) is even sharper than Round
-4's healthy median (2.56). But the spread has become very
-heterogeneous (from 0.10 to 299). This directly matches Phase 13's
-rarity-weighting: an uneven 1x to 10x weight across different
-timesteps creates very different gradient pressure within the same
-sequence, causing beta to become inconsistent from timestep to
-timestep. This is the concrete mechanism behind the previously
-documented "attention_width volatility."
+```
+[epoch 26 step 250/365] stroke_nll=-11.7718
+```
 
-**Three Fixes in Round 6**
+This is **not the average of the whole of Epoch 26** - it's just a
+single mid-epoch mini-batch step, one out of 365 steps. Epoch 26's
+actual average (which represents training progress) was `train
+stroke_nll=-6.19`, `val stroke_nll=-7.46` - completely in the normal
+range, no crash. Individual step numbers in training logs always
+fluctuate up and down (this happened in Round 3/4's logs too, just
+their magnitude was smaller because loss's own scale was smaller) -
+only the epoch-level average shows real progress, not a single step.
 
-1. **`char_rarity_max_weight`: 10.0 → 4.0** - N still gets a meaningful
-   weight (4.0x), but the heterogeneity ratio drops from 8.15x to
-   3.26x.
-2. **SGDR restart-decay** (new `--restart_decay`, default `0.7`) - each
-   restart's peak LR becomes progressively gentler (`0.7x`, `0.49x`,
-   `0.343x`, ...). Reason: Round 5's worst epoch (25) comes exactly 1
-   epoch after a restart boundary (LR ~96% of peak), when the loss
-   landscape is already heterogeneous from rarity-weighting - a
-   full-strength restart at that point creates a double disruption.
-3. **`measure_attention_beta_stats`** (new function) - the real beta
-   distribution (min/p5/median/p95/max, floor-fraction) is printed
-   during training itself, on a fixed batch, at every generation-check
-   - not just the phi-width proxy.
+**Two new findings that came up while verifying:**
 
-**Verification**
+**1. The entire loss scale has changed - comparing directly with older
+rounds would be wrong.** Round 4's final val stroke_nll was `-1.73`.
+Round 5's is `-7.72` - roughly **4.47 times bigger**. This isn't a sign
+of instability, it's an expected side-effect of rarity-weighting
+itself: through the formula `(max_count/count)^0.5`, even "Namaskar"'s
+common letters (a, m, s, r) are already getting weight from `1.5x` to
+`2.9x` (see Phase 13's table), and across the whole training corpus
+(which includes punctuation, digits, capitals, all of it), the average
+timestep-weight can land around `4` to `5x`. Meaning **directly
+comparing Round 5's raw loss numbers with Round 3/4 is simply the wrong
+approach** - the scale itself is different now.
 
-- Warm-start test: **147/147 tensors** reused.
-- Some real training steps were run, loss stayed stable/finite.
-- `run_generation_check` (with the new beta-stats logging) was tested
-  in isolation on the Round 5 checkpoint - the **HIGH BETA
-  HETEROGENEITY** warning fired automatically (p95/p5 > 50x threshold),
-  the same problem that had been measured manually.
+**2. Attention_width has genuinely become more volatile - this is a
+real, verified instability.** In Round 4, attention_width stayed in a
+tight range (`0.71` to `0.84`, average `0.743`). In Round 5 it swings
+from `0.45` to `1.43` (average `1.027`, itself above `1.0`). In Round
+3/4 attention never crossed `1.0`. This is a concrete, measured sign
+that the attention mechanism was genuinely disturbed in this round.
 
-**Independent Code-Level Verification (Cross-Check)**
+**3. Most important, a somewhat disappointing point: even in the
+checkpoints where output was stable (Epoch 0, 10, 15, 20, 35), the
+first letter still looks like a "T," not an "N."** Meaning all of Phase
+13's rarity-weighting - whose theory was verified correctly (the real
+character-frequency proof in Phase 12), and whose code was also
+carefully tested - **did not achieve its original target (fixing N)
+within 40 epochs**. The theory wasn't wrong, but a weight as aggressive
+as `10.0x` was perhaps more than necessary - it disturbed training
+(attention volatility, periodic stuttering) without solving the actual
+problem.
 
-| Claim | Verified |
-|---|---|
-| `restart_decay` is a new parameter, default 0.7, formula `restart_decay ** cycle_index` | ✅ |
-| `char_rarity_max_weight` CLI default 10.0 → 4.0 | ✅ (loss.py's function-signature default stays 10.0 by design, since the actual value is passed as an argument from train_expert.py) |
-| `measure_attention_beta_stats` is a new, hook-based function that measures real beta | ✅ |
-| Beta heterogeneity warning triggers at `p95/p5 > 50x` | ✅ (Round 5 checkpoint's ratio came out to 129.68x, above the threshold) |
-| No Round 6 changes in `loss.py` | ✅ (by design - the new parameters are all passed as CLI arguments) |
-
-> **Phase 14 Verdict**
-> Round 5 improved loss considerably (-1.2557 → -7.1868), but the
-> character-identity problem (Namaskar's first letter T-shaped, the
-> whole word fragmenting) still isn't solved. A new, concrete
-> mechanism was confirmed: rarity-weighting's uneven (1x-10x)
-> per-timestep weight is making beta heterogeneous (p95/p5 =
-> 129.68x), not causing collapse. Round 6 is ready with these three
-> fixes: lower max_weight (10→4), gentler progressive SGDR restarts,
-> and live beta-heterogeneity monitoring built into training.
-> `--warm_start_from` will now point to Round 5's checkpoint.
+> **Round 5 Verdict**
+> - Character-rarity theory: confirmed correct (proof found in Phase
+>   12), and the implementation was also bug-free (verified in Phase
+>   13)
+> - Training stability: partially disturbed - attention_width is now
+>   more volatile (range `0.45`-`1.43` vs Round 4's tight
+>   `0.71`-`0.84`), and three epochs (5, 25, 30) showed genuine
+>   stuttering (57-135 pen-lifts, hitting max_steps)
+> - "N"'s spelling fix: still not done - even in stable checkpoints,
+>   'N' is still coming out shaped like a 'T' instead
+> - Loss numbers: on a new scale (~4.5x bigger), do not directly
+>   compare with older rounds
+>
+> Remaining hypothesis: a max weight of `10.0x` was too much, enough to
+> destabilize training, and it didn't meaningfully help the model learn
+> "N" within so few epochs. Next step: lower the weight ceiling (e.g.
+> 3-4 instead of 10.0), and/or try turning off SGDR warm restarts to
+> see whether rarity-weighting alone (without the double-disruption of
+> restarts) gives more stable training.
 
 ---
 
