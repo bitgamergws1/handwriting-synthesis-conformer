@@ -1,4 +1,4 @@
-# Handwriting Synthesis AI - Poori Documentation
+# Handwriting Synthesis AI - Poori Documentation -(Hinglish Version)
 ### Zero se seekho: yeh AI kaise text ko human jaisi handwriting mein badalta hai
 
 Yeh document is tarah likha gaya hai ki agar tumhe coding aur AI ka bilkul
