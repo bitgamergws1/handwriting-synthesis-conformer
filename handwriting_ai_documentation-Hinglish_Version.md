@@ -1488,7 +1488,101 @@ chalaye gaye, sab clean chala.
 
 ---
 
-## Section 8 - Poore System Ka Ek-Line Summary (Beginner Ke Liye Recap)
+### Phase 16 - Round 6 Poori Training: Attention "Fast-Forward" Karne Lagi
+
+Round 6 ki poori 40-epoch training GPU par chalayi gayi, Round 5 ke
+checkpoint se warm-start karke, teeno naye fixes (max_weight 10→4,
+gentle SGDR decay, live beta monitoring) ke saath. Neeche jo bhi likha
+hai wo asli `.log` file se line-by-line verify kiya gaya hai.
+
+**Poori journey, table mein:**
+
+| Epoch | Points | Pen-Lifts | Attention Width | Beta Max | HIGH BETA Warning |
+|---|---|---|---|---|---|
+| 0 | 117 | 31 | 1.333 | 312.2 | haan |
+| 5 | 134 | 23 | 1.013 | 347.6 | haan |
+| 10 | 161 | 33 | 1.114 | 403.4 | haan |
+| 15 | **74** | 13 | 0.978 | 403.4 | haan |
+| 20 | **74** | 13 | 0.994 | 403.4 | haan |
+| 25 | **78** | 15 | 0.994 | 403.4 | haan |
+| 30 | **74** | 13 | 0.992 | 403.4 | haan |
+| 35 | **69** | 12 | 1.055 | 403.4 | haan |
+
+**Confirm hui cheezein, log se:**
+
+1. **Point-count ka dramatic, sustained drop.** Epoch 10 tak `161`
+   points the (normal range ke aas paas), lekin Epoch 15 se lekar
+   Epoch 35 tak yeh consistently `69`-`78` ke beech atak gaya - 5
+   consecutive checkpoints mein, koi random noise nahi, ek genuine,
+   sustained shift.
+
+2. **Images mein bhi yehi dikhta hai.** "Namaskar" ki saari generated
+   images mein "T" phir "c" jaisa curve, uske baad seedhi vertical
+   dashes ka silsila (`| | | |`) - continuous cursive loops ki jagah.
+
+   ![Round 6 epoch 0](images/round6_epoch_000.png)
+   ![Round 6 epoch 15](images/round6_epoch_015.png)
+   ![Round 6 epoch 35](images/round6_epoch_035.png)
+
+3. **Ek precise, mechanical finding: beta ka max value literally
+   hard ceiling hai, random spike nahi.** Epoch 10 se 35 tak har
+   checkpoint mein max beta exactly `403.429` hai, digit-by-digit
+   same. Yeh coincidence nahi hai:
+
+```python
+import math
+math.exp(6.0)  # = 403.4288...
+```
+
+   `6.0` model ke `kappa_clamp` (beta ka upper limit) ka value hai.
+   Matlab beta kisi ek point par poori tarah is hard ceiling ko
+   saturate kar raha hai, baar baar, har checkpoint mein - yeh sirf
+   "high hai" nahi, yeh "maximum allowed value par completely stuck
+   hai".
+
+4. **HIGH BETA HETEROGENEITY warning har single checkpoint par fire
+   hui** (`p95/p5 > 50x`), jaisa Phase 15 mein design kiya gaya tha -
+   monitoring tool sahi kaam kar raha hai, problem ko turant pakad
+   raha hai.
+
+**Ek cheez jo thodi overstate ho sakti hai agar dhyan na diya jaaye:
+"normal" point-count ka baseline.** Purane rounds check karne par,
+typical range `100`-`160` points ka raha hai (Round 4 mein), na ki
+`300`. `290` sirf Round 3 ke bahut hi early, unstable epoch 0 mein ek
+baar dikha tha. Isliye Round 6 ka `69`-`78` drop `161` se compare
+karna sahi hai, lekin usay kisi bhi purane "normal 300" se compare
+karna thoda misleading hoga.
+
+**Mechanism ka explanation: yeh confirmed causal proof nahi hai, ek
+plausible correlation hai.** Jo dikh raha hai: jab rarity-weighting
+active hoti hai, model ke strokes chhote aur seedhe ho gaye, timing-wise
+isi ke saath shuru hua. Lekin isay directly prove karne ke liye ek
+controlled test chahiye hota - jaise same checkpoint par rarity-weighting
+on/off karke seedha compare karna (jaisa Phase 12 mein context-ablation
+test kiya gaya tha). Woh test abhi tak nahi hua hai, isliye yeh ek
+strong, plausible hypothesis hai, confirmed mechanism nahi.
+
+> **Round 6 Verdict**
+> - Character-rarity theory: abhi bhi sahi (Phase 12 se), lekin do
+>   consecutive rounds (5 aur 6) mein implementation instability laayi
+>   hai bina "N" fix kiye
+> - Point-count/stroke-length: naya problem - Epoch 15 se drastically
+>   gir gaya (`161` → `69`-`78`), sustained pattern
+> - Beta ceiling: saturate ho raha hai consistently (`403.429`,
+>   hard upper limit)
+> - Monitoring system: kaam kar raha hai jaisa plan tha - warning har
+>   checkpoint par fire hui
+> - Character identity ("N" sahi banana): abhi bhi not done
+>
+> Decision: rarity-weighting mechanism (`timestep_rarity_weight` via
+> `phi`) ko Round 7 ke liye purge kar diya jaayega, warm-start Round 4
+> ke stable checkpoint se hoga (Round 5/6 se nahi), entropy regularizer
+> aur SGDR-decay retain kiye jaayenge. Yeh decision do consecutive
+> rounds ke consistent instability data par based hai.
+
+---
+
+
 
 Agar tum khud yeh system banana chaho to yeh crux hai:
 
