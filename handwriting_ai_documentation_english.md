@@ -19,7 +19,7 @@ way a human writes by hand.
 
 For training we used the IAM On-Line Handwriting Database, which is real
 pen-movement data written by 147 different people. This dataset doesn't
-just contain photos — every pen stroke's x and y coordinates are recorded
+just contain photos - every pen stroke's x and y coordinates are recorded
 along with time.
 
 ---
@@ -185,7 +185,7 @@ natural flow of a letter's curve.
 
 **What "Causal" means** - the model can only see pen movements up to now,
 not future points. This is necessary because at actual generation time
-the model doesn't know the future at all — it produces one point at a
+the model doesn't know the future at all - it produces one point at a
 time. If the model were shown the future during training, it wouldn't
 work at generation time because the future doesn't even exist yet.
 
@@ -226,20 +226,20 @@ parallel for the whole sequence in a single line, with no Python loop
 needed. This makes training much faster.
 
 `kappa_increment` needs to go through `exp()` so it always stays
-positive — if the increment were ever negative, attention would move
+positive - if the increment were ever negative, attention would move
 backward and the "monotonic" property would break.
 
 In this same block there's another parameter called `beta`, which
 controls how sharp (tightly focused on one letter) or how wide (blurrily
 across several letters at once) the attention's focus is. This parameter
 later becomes a big bug in Phase 9, where the model deliberately shrinks
-it — see Phase 9 in Section 7 for that whole story.
+it - see Phase 9 in Section 7 for that whole story.
 
 ### 4.5 Fusion Layer - Where the Biggest Bug Was
 
 This is where the hand (the Conformer's output) and the eye (attention's
 context) get combined. In the Round 1 training, this was exactly the
-place where the "Joint LayerNorm Bug" was found — a single normalization
+place where the "Joint LayerNorm Bug" was found - a single normalization
 layer was normalizing both signals together, causing the hand's signal
 to remain 6 times louder than the eye's signal.
 
@@ -262,7 +262,7 @@ fused = self.fusion(torch.cat([h_normed, context_normed], dim=-1))
 Each signal first gets its own normalization (its own mean at zero, its
 own consistent spread), and only then are they combined. This lets both
 signals reach the network with equal importance, and the network itself
-learns which one to weight more at which time — not because of some
+learns which one to weight more at which time - not because of some
 accident.
 
 ### 4.6 MDN Head - The Final Decision (Mixture Density Network)
@@ -347,7 +347,7 @@ pen_nll = F.binary_cross_entropy_with_logits(
 
 `pos_weight` means: if the model misses an actual pen-lift, its penalty
 will be 24 times bigger than a normal mistake. This forces the model to
-take pen-lift prediction seriously — it can't just ignore it.
+take pen-lift prediction seriously - it can't just ignore it.
 
 ---
 
@@ -1468,7 +1468,101 @@ were run, everything ran clean.
 
 ---
 
-## Section 8 - One-Line Summary of the Whole System (Recap for Beginners)
+### Phase 16 - Round 6 Full Training: Attention Starts "Fast-Forwarding"
+
+The full 40-epoch Round 6 training was run on GPU, warm-started from
+the Round 5 checkpoint, with all three new fixes (max_weight 10→4,
+gentle SGDR decay, live beta monitoring). Everything below has been
+verified line-by-line against the actual `.log` file.
+
+**The full journey, in a table:**
+
+| Epoch | Points | Pen-Lifts | Attention Width | Beta Max | HIGH BETA Warning |
+|---|---|---|---|---|---|
+| 0 | 117 | 31 | 1.333 | 312.2 | yes |
+| 5 | 134 | 23 | 1.013 | 347.6 | yes |
+| 10 | 161 | 33 | 1.114 | 403.4 | yes |
+| 15 | **74** | 13 | 0.978 | 403.4 | yes |
+| 20 | **74** | 13 | 0.994 | 403.4 | yes |
+| 25 | **78** | 15 | 0.994 | 403.4 | yes |
+| 30 | **74** | 13 | 0.992 | 403.4 | yes |
+| 35 | **69** | 12 | 1.055 | 403.4 | yes |
+
+**Things confirmed from the log:**
+
+1. **A dramatic, sustained drop in point-count.** Up to Epoch 10, point
+   counts were around `161` (roughly the normal range), but from Epoch
+   15 through Epoch 35 it consistently sat between `69` and `78` -
+   across 5 consecutive checkpoints, not random noise, a genuine,
+   sustained shift.
+
+2. **The images show the same thing.** Every generated "Namaskar"
+   image shows a "T", then a "c"-like curve, followed by a series of
+   straight vertical dashes (`| | | |`) instead of continuous cursive
+   loops.
+
+   ![Round 6 epoch 0](images/round6_epoch_000.png)
+   ![Round 6 epoch 15](images/round6_epoch_015.png)
+   ![Round 6 epoch 35](images/round6_epoch_035.png)
+
+3. **A precise, mechanical finding: beta's max value is literally a
+   hard ceiling, not a random spike.** From Epoch 10 through 35, every
+   single checkpoint's max beta is exactly `403.429`, digit-for-digit
+   identical. That's not a coincidence:
+
+```python
+import math
+math.exp(6.0)  # = 403.4288...
+```
+
+   `6.0` is the value of the model's `kappa_clamp` (beta's upper
+   limit). That means beta, at some point in the sequence, is
+   completely saturating this hard ceiling, over and over, at every
+   checkpoint - it isn't just "high", it's "stuck at the maximum
+   allowed value".
+
+4. **The HIGH BETA HETEROGENEITY warning fired at every single
+   checkpoint** (`p95/p5 > 50x`), exactly as designed in Phase 15 -
+   the monitoring tool is working correctly, catching the problem
+   immediately.
+
+**One thing that could be overstated if not careful: the "normal"
+point-count baseline.** Checking earlier rounds, the typical range was
+`100`-`160` points (in Round 4), not `300`. `290` only ever showed up
+once, very early, in Round 3's unstable Epoch 0. So comparing Round
+6's `69`-`78` drop to `161` is fair, but comparing it to any earlier
+"normal 300" baseline would be somewhat misleading.
+
+**On the mechanism: this is a plausible correlation, not confirmed
+causal proof.** What's visible is that once rarity-weighting became
+active, the model's strokes got shorter and straighter, starting
+around the same time. But proving this directly would need a
+controlled test - such as toggling rarity-weighting on/off on the same
+checkpoint and comparing directly (similar to the context-ablation
+test done in Phase 12). That test hasn't been run yet, so this is a
+strong, plausible hypothesis, not a confirmed mechanism.
+
+> **Round 6 Verdict**
+> - Character-rarity theory: still correct (from Phase 12), but the
+>   implementation has brought instability across two consecutive
+>   rounds (5 and 6) without fixing "N"
+> - Point-count/stroke-length: a new problem - dropped drastically
+>   from Epoch 15 onward (`161` → `69`-`78`), a sustained pattern
+> - Beta ceiling: consistently saturating (`403.429`, the hard upper
+>   limit)
+> - Monitoring system: working as planned - the warning fired at
+>   every checkpoint
+> - Character identity (drawing "N" correctly): still not done
+>
+> Decision: the rarity-weighting mechanism (`timestep_rarity_weight`
+> via `phi`) will be purged for Round 7, warm-starting from Round 4's
+> stable checkpoint (not Round 5 or 6), while keeping the entropy
+> regularizer and SGDR-decay. This decision is based on two
+> consecutive rounds of consistent instability data.
+
+---
+
+
 
 If you want to build this system yourself, here's the crux of it:
 
