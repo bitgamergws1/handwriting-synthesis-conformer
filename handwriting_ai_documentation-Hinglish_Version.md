@@ -1521,7 +1521,12 @@ hai wo asli `.log` file se line-by-line verify kiya gaya hai.
    dashes ka silsila (`| | | |`) - continuous cursive loops ki jagah.
 
    ![Round 6 epoch 0](images/round6_epoch_000.png)
+   ![Round 6 epoch 5](images/round6_epoch_005.png)
+   ![Round 6 epoch 10](images/round6_epoch_010.png)
    ![Round 6 epoch 15](images/round6_epoch_015.png)
+   ![Round 6 epoch 20](images/round6_epoch_020.png)
+   ![Round 6 epoch 25](images/round6_epoch_025.png)
+   ![Round 6 epoch 30](images/round6_epoch_030.png)
    ![Round 6 epoch 35](images/round6_epoch_035.png)
 
 3. **Ek precise, mechanical finding: beta ka max value literally
